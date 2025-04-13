@@ -1,30 +1,56 @@
 import os
 import numpy as np 
 from src.data.loader import get_writerID, get_text_line_by_line, get_stroke_seqs, list_files 
-from src.data.preprocessing import pad_line, create_mask 
+from src.data.preprocessing import pad_line, create_mask, stroke_coords_to_offsets
 from src.utils.stroke_viz import plot_stroke_seq
 
 class OnlineHandwritingDataset:
     """
+    Dataset class for online handwriting. 
+
+    Each sample corresponds to a text line from .txt file in the ascii folder and 
+    its associated stroke data obtained from lineStrokes folder. 
     """
+
     def __init__(self, ascii_root, extreme_threshold = 100):
+        """
+        Params: 
+            ascii_root: Dirctory containing text files. 
+            extreme_threshold: max allowed distance between two consecutive stroke points
+        """
+
         self.ascii_files = list_files(ascii_root) 
         self.extreme_threshold = extreme_threshold 
         self.MAX_STROKE_LENGTH = 0
         self.MAX_TEXT_LENGTH = 0
-        self.ALPHABET = [] 
+        self.ALPHABET = ['\x00',' ', '!', '"', '#', '&', "'", '(', ')', '*', '+', ',', '-', '.', '/', '0', '1', '2', '3', '4', 
+                    '5', '6', '7', '8', '9', ':', ';', '?', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 
+                    'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', '[', ']', 'a', 'b', 
+                    'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 
+                    'v', 'w', 'x', 'y', 'z']
         self.samples_loaded = False
-        self.ALPHABET_SIZE = 83 
+        self.char_to_index = {char: idx for idx, char in enumerate(self.ALPHABET)}
+        self.ALPHABET_SIZE = len(self.ALPHABET)
     
     def _encode_text(self, text):
-        #TODO: One hot encoding 
-        return np.array([ord(c) for c in text], dtype=np.int8) 
+        """
+        Encodes a text string into a sequence of integer indices based on the dataset alphabet.
+        Characters not found in the alphabet default to index 0.
+        """
+        return np.array([self.char_to_index.get(c, 0) for c in text], dtype=np.int8)
     
     def _load_samples(self):
+        """
+        Loads and processes all samples from the ASCII and stroke files.
+        
+        Returns:
+            A dictionary with processed numpy arrays for strokes (offsets), stroke lengths,
+            encoded text, text lengths, writer IDs, and a mask for valid stroke positions. 
+        """
         texts_per_line = []
         strokes_per_line = []
         writerIDs = []
-        for ascii_file in self.ascii_files[:2]:
+        for ascii_file in self.ascii_files:
             # sample ascii_file: ascii/a01/a01-000/a01-000u.txt 
 
             text_lines = get_text_line_by_line(ascii_file) 
@@ -47,9 +73,9 @@ class OnlineHandwritingDataset:
             stroke_files = sorted([os.path.join(stroke_files_base, f) for f in os.listdir(stroke_files_base) if f.startswith(stroke_file_name_prefix)]) 
 
             if not stroke_files or len(stroke_files) != len(text_lines):
-                print(f"The current lines in the text and stroke files don't match. File name: {ascii_file}")
+                # print(f"The current lines in the text and stroke files don't match. File name: {ascii_file}")
                 continue
-            
+
             original_root_folder = head.replace("ascii", "original")
             original_xml_path = os.path.join(original_root_folder,"strokes" + last_char + ".xml")  
             writerID = get_writerID(original_xml_path) 
@@ -60,15 +86,16 @@ class OnlineHandwritingDataset:
 
             for stroke_file in stroke_files:
                 strokes = get_stroke_seqs(stroke_file)
+                offsets = stroke_coords_to_offsets(strokes)
                 # print("Len(strokes): ", len(strokes))
                 self.MAX_STROKE_LENGTH = max(self.MAX_STROKE_LENGTH, len(strokes))
-                strokes_per_line.append(strokes) 
+                strokes_per_line.append(offsets) 
                 writerIDs.append(writerID) 
                 # curr_text_strokes.append(strokes)
             # plot_stroke_seq(curr_text_strokes) 
         
         assert len(texts_per_line) == len(strokes_per_line) == len(writerIDs), \
-            "Mismatch between texts, strokes, and writer IDs." 
+            "Mismatch between texts, strokes, and writer IDs. File name: {fname}" 
         
         num_samples = len(texts_per_line)
 
@@ -90,14 +117,16 @@ class OnlineHandwritingDataset:
             char_sequences[i, :length] = encoded_text[:length]
             char_lengths[i] = length
 
+        # create a mask for the stroke data
+        stroke_mask = np.array([create_mask(strokes_per_line[i], max_points= self.MAX_STROKE_LENGTH)
+                                  for i in range(num_samples)], dtype=np.float32)
         processed_data = {
             'strokes': strokes_padded,
             'strokes_len': strokes_length,
             'chars': char_sequences,
             'chars_len': char_lengths,
             'writer_ids': np.array(writerIDs, dtype=np.int16),
-            'mask': np.array([create_mask(strokes_per_line[i], self.MAX_STROKE_LENGTH) 
-                            for i in range(num_samples)])
+            'mask': stroke_mask
         }
 
         self.samples_loaded = True
@@ -118,5 +147,5 @@ if __name__ == "__main__":
     np.save(os.path.join(processed_dir, "chars_len.npy"), data['chars_len'])
     np.save(os.path.join(processed_dir, "writer_ids.npy"), data['writer_ids'])
     np.save(os.path.join(processed_dir, "mask.npy"), data['mask'])
+
     print("Processed data saved successfully.")
-        
