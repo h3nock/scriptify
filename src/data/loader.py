@@ -7,12 +7,15 @@ def get_writerID(fname):
     """
     Reads a xml file and returns the writerID from general element (tag)
     """
-    xml_tree = ElementTree.parse(fname) 
-    general_tag = xml_tree.getroot().find('General') 
     writerID = 0 
-    if general_tag is not None:
-        # get the writerID from the first child which <Form> tag 
-        writerID = int(general_tag[0].attrib.get("writerID", 0))
+    if os.path.exists(fname):
+        try:
+            xml_tree = ElementTree.parse(fname) 
+            general_tag = xml_tree.getroot().find('General') 
+            if general_tag is not None:
+                writerID = int(general_tag[0].attrib.get("writerID", 0))
+        except ElementTree.ParseError as e:
+            print(f"Warning: Failed to parse XML file {fname}: {e}")
     return writerID
 
 def get_text_line_by_line(fname):
