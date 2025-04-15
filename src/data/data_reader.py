@@ -1,2 +1,0 @@
-class DataReader:
-    pass 
