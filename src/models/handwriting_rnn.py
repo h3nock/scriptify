@@ -1,0 +1,174 @@
+import torch  
+import numpy as np
+import torch.nn as nn  
+import torch.nn.functional as F  
+from .attention import AttentionMechanism  
+from .gmm import GMMLayer  
+  
+class HandwritingRNN(nn.Module):  
+    def __init__(self,   
+                 lstm_size=400,   
+                 output_mixture_components=20,   
+                 attention_mixture_components=10,  
+                 char_embedding_size=32, 
+                 alphabet_size = 82
+                 ):  
+        super(HandwritingRNN, self).__init__()  
+        self.lstm_size = lstm_size  
+        self.output_mixture_components = output_mixture_components  
+        self.attention_mixture_components = attention_mixture_components  
+        self.char_embedding_size = char_embedding_size  
+        self.alphabet_size = alphabet_size
+          
+        # character embedding  
+        self.char_embedding = nn.Embedding(self.alphabet_size, char_embedding_size)  
+          
+        # LSTM layers  
+        self.lstm1 = nn.LSTMCell(3 + self.lstm_size, self.lstm_size)  # Input + window vector  
+        self.lstm2 = nn.LSTMCell(3 + self.lstm_size + self.lstm_size, self.lstm_size)  # Input + lstm1 output + window  
+        self.lstm3 = nn.LSTMCell(3 + self.lstm_size + self.lstm_size, self.lstm_size)  # Input + lstm2 output + window  
+          
+        # attention mechanism  
+        self.attention = AttentionMechanism(  
+            self.lstm_size,   
+            self.attention_mixture_components,  
+            120  # max character sequence length  
+        )  
+          
+        self.gmm = GMMLayer(self.lstm_size, self.output_mixture_components)  
+          
+    def forward(self, inputs, char_seq, char_seq_lengths, hidden_state=None):  
+        batch_size = inputs.size(0)  
+        seq_length = inputs.size(1)  
+          
+        # initialize hidden states if not provided  
+        if hidden_state is None:  
+            h1 = torch.zeros(batch_size, self.lstm_size, device=inputs.device)  
+            c1 = torch.zeros(batch_size, self.lstm_size, device=inputs.device)  
+            h2 = torch.zeros(batch_size, self.lstm_size, device=inputs.device)  
+            c2 = torch.zeros(batch_size, self.lstm_size, device=inputs.device)  
+            h3 = torch.zeros(batch_size, self.lstm_size, device=inputs.device)  
+            c3 = torch.zeros(batch_size, self.lstm_size, device=inputs.device)  
+            window = torch.zeros(batch_size, self.lstm_size, device=inputs.device)  
+            kappa = torch.zeros(batch_size, self.attention_mixture_components, device=inputs.device)  
+        else:  
+            h1, c1, h2, c2, h3, c3, window, kappa = hidden_state  
+          
+        # embed character sequence  
+        embedded_chars = self.char_embedding(char_seq)  
+          
+        # process sequence  
+        outputs = []  
+        for t in range(seq_length):  
+            x_t = inputs[:, t, :]  
+              
+            # LSTM 1  
+            lstm1_input = torch.cat([window, x_t], dim=1)  
+            h1, c1 = self.lstm1(lstm1_input, (h1, c1))  
+              
+            # Attention  
+            window, kappa, phi = self.attention(  
+                h1, window, kappa, x_t, embedded_chars, char_seq_lengths  
+            )  
+              
+            # LSTM 2  
+            lstm2_input = torch.cat([x_t, h1, window], dim=1)  
+            h2, c2 = self.lstm2(lstm2_input, (h2, c2))  
+              
+            # LSTM 3  
+            lstm3_input = torch.cat([x_t, h2, window], dim=1)  
+            h3, c3 = self.lstm3(lstm3_input, (h3, c3))  
+              
+            # GMM output  
+            gmm_params = self.gmm(h3)  
+            outputs.append(gmm_params)  
+          
+        stacked_outputs = [torch.stack([out[i] for out in outputs], dim=1) for i in range(5)]  
+          
+        # hidden state for next sequence  
+        hidden_state = (h1, c1, h2, c2, h3, c3, window, kappa)  
+          
+        return stacked_outputs, hidden_state  
+      
+    def sample(self, char_seq, char_seq_lengths, max_length=1000, bias=0.5, prime=None):  
+        batch_size = char_seq.size(0)  
+        device = char_seq.device  
+          
+        # embed character sequence  
+        embedded_chars = self.char_embedding(char_seq)  
+          
+        # initialize hidden states  
+        h1 = torch.zeros(batch_size, self.lstm_size, device=device)  
+        c1 = torch.zeros(batch_size, self.lstm_size, device=device)  
+        h2 = torch.zeros(batch_size, self.lstm_size, device=device)  
+        c2 = torch.zeros(batch_size, self.lstm_size, device=device)  
+        h3 = torch.zeros(batch_size, self.lstm_size, device=device)  
+        c3 = torch.zeros(batch_size, self.lstm_size, device=device)  
+        window = torch.zeros(batch_size, self.lstm_size, device=device)  
+        kappa = torch.zeros(batch_size, self.attention_mixture_components, device=device)  
+          
+        # initial input  
+        x = torch.zeros(batch_size, 3, device=device)  
+        x[:, 2] = 1.0  # initial pen state  
+          
+        if prime is not None:  
+            prime_seq_length = prime.size(1)  
+            # process prime sequence to get initial hidden states  
+            for t in range(prime_seq_length):  
+                x_t = prime[:, t, :]  
+                  
+                # LSTM 1  
+                lstm1_input = torch.cat([window, x_t], dim=1)  
+                h1, c1 = self.lstm1(lstm1_input, (h1, c1))  
+                  
+                # Attention  
+                window, kappa, phi = self.attention(  
+                    h1, window, kappa, x_t, embedded_chars, char_seq_lengths  
+                )  
+                  
+                # LSTM 2  
+                lstm2_input = torch.cat([x_t, h1, window], dim=1)  
+                h2, c2 = self.lstm2(lstm2_input, (h2, c2))  
+                  
+                # LSTM 3  
+                lstm3_input = torch.cat([x_t, h2, window], dim=1)  
+                h3, c3 = self.lstm3(lstm3_input, (h3, c3))  
+                  
+                if t == prime_seq_length - 1:  
+                    x = x_t  
+          
+        # generate sequence  
+        strokes = []  
+        for t in range(max_length):  
+            # LSTM 1  
+            lstm1_input = torch.cat([window, x], dim=1)  
+            h1, c1 = self.lstm1(lstm1_input, (h1, c1))  
+              
+            # Attention  
+            window, kappa, phi = self.attention(  
+                h1, window, kappa, x, embedded_chars, char_seq_lengths  
+            )  
+              
+            # LSTM 2  
+            lstm2_input = torch.cat([x, h1, window], dim=1)  
+            h2, c2 = self.lstm2(lstm2_input, (h2, c2))  
+              
+            # LSTM 3  
+            lstm3_input = torch.cat([x, h2, window], dim=1)  
+            h3, c3 = self.lstm3(lstm3_input, (h3, c3))  
+              
+            # GMM output  
+            pis, mus, sigmas, rhos, es = self.gmm(h3, bias)  
+              
+            # sample from GMM  
+            stroke = self.gmm.sample(pis, mus, sigmas, rhos, es)  
+            strokes.append(stroke)  
+              
+            # update input for next step  
+            x = stroke  
+              
+            if torch.all(stroke[:, 2] > 0.5):  
+                break  
+          
+        strokes = torch.stack(strokes, dim=1)  
+        return strokes  
