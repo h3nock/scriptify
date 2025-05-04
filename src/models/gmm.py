@@ -11,7 +11,7 @@ class GMMLayer(nn.Module):
         self.input_size = input_size 
         self.num_mixtures = num_mixtures
         self.output_size = num_mixtures * 6 + 1  
-        self.output_layer = nn.Linear(input_size, self.out_dim)
+        self.output_layer = nn.Linear(input_size, self.output_size)
     
     def forward(self, x):
         """
@@ -31,14 +31,7 @@ class GMMLayer(nn.Module):
         rhos = torch.tanh(rhos).clamp(min = -0.99, max=0.99) 
         es = torch.sigmoid(es).clamp(min = 1e-8, max = 1 - 1e-8)
  
-        mdn_params = {
-            'pis': pis,       
-            'mus': mus,       
-            'sigmas': sigmas, 
-            'rhos': rhos, 
-            'es': es     
-        }
-        return mdn_params 
+        return pis, mus, sigmas, rhos, es 
     
     def sample(self, pis, mus, sigmas, rhos, es):
 
@@ -79,8 +72,3 @@ class GMMLayer(nn.Module):
         # combine into stroke  
         stroke = torch.cat([xy, e], dim=1)  
         return stroke
-
-
-
-        
-        
