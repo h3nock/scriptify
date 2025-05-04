@@ -2,6 +2,7 @@
 .vscode 
 .venv/
 /data/
+/outputs/
 
 # Byte-compiled / optimized files
 __pycache__/
