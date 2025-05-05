@@ -3,6 +3,9 @@
 .venv/
 /data/
 /outputs/
+/checkpoints/ 
+/logs/
+
 
 # Byte-compiled / optimized files
 __pycache__/
