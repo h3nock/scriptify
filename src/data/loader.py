@@ -38,6 +38,7 @@ def get_text_line_by_line(fname):
                 lines.append(line)
             if line == "CSR:":
                 csr_found = True
+    # print(f"TEXT_LOADER: file {fname} with {len(lines)} text lines.")
     return lines
 
 def get_stroke_seqs(stroke_file):
@@ -62,14 +63,16 @@ def get_stroke_seqs(stroke_file):
             if 'x' not in point.attrib or 'y' not in point.attrib:
                 continue
             x = int(point.attrib['x'])
-            y = int(point.attrib['y'])
+            y = -1 * int(point.attrib['y']) # negate y coord to match the whiteboard's coordinate convention
             # mark the last point in the stroke with eos flag = 1
             if i + 1 == pts:
                 seqs.append((x, y, 1))
             else:
                 seqs.append((x, y, 0))
-    
-    return np.array(seqs)
+    if not seqs:
+        return np.empty((0,3), dtype=np.int32)
+
+    return np.array(seqs, dtype=np.int32)
 
 def list_files(root_dir, skip_hidden=True):
     """

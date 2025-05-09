@@ -1,7 +1,9 @@
 import torch  
 import numpy as np
 import torch.nn as nn  
-import torch.nn.functional as F  
+import torch.nn.functional as F
+
+from src.data.dataloader import ProcessedHandwritingDataset  
 from .attention import AttentionMechanism  
 from .gmm import GMMLayer  
   
@@ -10,34 +12,36 @@ class HandwritingRNN(nn.Module):
                  lstm_size=400,   
                  output_mixture_components=20,   
                  attention_mixture_components=10,  
-                 char_embedding_size=32, 
-                 alphabet_size = 82
+                 alphabet_size = ProcessedHandwritingDataset.get_alphabet_size() 
                  ):  
         super(HandwritingRNN, self).__init__()  
         self.lstm_size = lstm_size  
         self.output_mixture_components = output_mixture_components  
         self.attention_mixture_components = attention_mixture_components  
-        self.char_embedding_size = char_embedding_size  
         self.alphabet_size = alphabet_size
-          
-        # character embedding  
-        self.char_embedding = nn.Embedding(self.alphabet_size, char_embedding_size)  
-          
+
         # LSTM layers  
-        self.lstm1 = nn.LSTMCell(3 + self.lstm_size, self.lstm_size)  # Input + window vector  
-        self.lstm2 = nn.LSTMCell(3 + self.lstm_size + self.lstm_size, self.lstm_size)  # Input + lstm1 output + window  
-        self.lstm3 = nn.LSTMCell(3 + self.lstm_size + self.lstm_size, self.lstm_size)  # Input + lstm2 output + window  
+        self.lstm1 = nn.LSTMCell(3 + self.alphabet_size, self.lstm_size)  # Input + window vector  
+        self.lstm2 = nn.LSTMCell(3 + self.lstm_size + self.alphabet_size, self.lstm_size)  # Input + lstm1 output + window  
+        self.lstm3 = nn.LSTMCell(3 + self.lstm_size + self.alphabet_size, self.lstm_size)  # Input + lstm2 output + window  
           
         # attention mechanism  
         self.attention = AttentionMechanism(  
             self.lstm_size,   
-            self.attention_mixture_components,  
-            120  # max character sequence length  
+            self.attention_mixture_components, 
+            self.alphabet_size
         )  
           
         self.gmm = GMMLayer(self.lstm_size, self.output_mixture_components)  
+
+    def one_hot_encode(self, char_seq):
+        return F.one_hot(char_seq, num_classes=self.alphabet_size,).float() 
           
-    def forward(self, inputs, char_seq, char_seq_lengths, hidden_state=None):  
+    def forward(self, inputs, char_seq, char_seq_lengths, hidden_state=None, bias=None):  
+        assert inputs.dim() == 3 and inputs.size(2) == 3 
+        assert char_seq.dim() == 2 
+        assert char_seq_lengths.dim() == 1 
+
         batch_size = inputs.size(0)  
         seq_length = inputs.size(1)  
           
@@ -49,13 +53,17 @@ class HandwritingRNN(nn.Module):
             c2 = torch.zeros(batch_size, self.lstm_size, device=inputs.device)  
             h3 = torch.zeros(batch_size, self.lstm_size, device=inputs.device)  
             c3 = torch.zeros(batch_size, self.lstm_size, device=inputs.device)  
-            window = torch.zeros(batch_size, self.lstm_size, device=inputs.device)  
-            kappa = torch.zeros(batch_size, self.attention_mixture_components, device=inputs.device)  
+            window = torch.zeros(batch_size, self.alphabet_size, device=inputs.device)  
+            kappa = torch.zeros(batch_size, self.attention_mixture_components, device=inputs.device)   
         else:  
-            h1, c1, h2, c2, h3, c3, window, kappa = hidden_state  
+            h1, c1, h2, c2, h3, c3, window, kappa = hidden_state 
           
-        # embed character sequence  
-        embedded_chars = self.char_embedding(char_seq)  
+        # one-hot encode 
+        char_one_hot = self.one_hot_encode(char_seq) 
+        
+        B, T_c, C1 = char_one_hot.shape 
+        assert C1 == self.alphabet_size 
+
           
         # process sequence  
         outputs = []  
@@ -68,7 +76,7 @@ class HandwritingRNN(nn.Module):
               
             # Attention  
             window, kappa, phi = self.attention(  
-                h1, window, kappa, x_t, embedded_chars, char_seq_lengths  
+                h1, window, kappa, x_t, char_one_hot, char_seq_lengths  
             )  
               
             # LSTM 2  
@@ -80,7 +88,7 @@ class HandwritingRNN(nn.Module):
             h3, c3 = self.lstm3(lstm3_input, (h3, c3))  
               
             # GMM output  
-            gmm_params = self.gmm(h3)  
+            gmm_params = self.gmm(h3, bias)  
             outputs.append(gmm_params)  
           
         stacked_outputs = [torch.stack([out[i] for out in outputs], dim=1) for i in range(5)]  
@@ -95,7 +103,7 @@ class HandwritingRNN(nn.Module):
         device = char_seq.device  
           
         # embed character sequence  
-        embedded_chars = self.char_embedding(char_seq)  
+        char_one_hot = self.one_hot_encode(char_seq) 
           
         # initialize hidden states  
         h1 = torch.zeros(batch_size, self.lstm_size, device=device)  
@@ -104,7 +112,7 @@ class HandwritingRNN(nn.Module):
         c2 = torch.zeros(batch_size, self.lstm_size, device=device)  
         h3 = torch.zeros(batch_size, self.lstm_size, device=device)  
         c3 = torch.zeros(batch_size, self.lstm_size, device=device)  
-        window = torch.zeros(batch_size, self.lstm_size, device=device)  
+        window = torch.zeros(batch_size, self.alphabet_size, device=device)
         kappa = torch.zeros(batch_size, self.attention_mixture_components, device=device)  
           
         # initial input  
@@ -123,7 +131,7 @@ class HandwritingRNN(nn.Module):
                   
                 # Attention  
                 window, kappa, phi = self.attention(  
-                    h1, window, kappa, x_t, embedded_chars, char_seq_lengths  
+                    h1, window, kappa, x_t, char_one_hot, char_seq_lengths  
                 )  
                   
                 # LSTM 2  
@@ -138,7 +146,14 @@ class HandwritingRNN(nn.Module):
                     x = x_t  
           
         # generate sequence  
-        strokes = []  
+        strokes = [] 
+        if isinstance(bias, (float, int)):
+             bias_tensor = torch.tensor([bias] * batch_size, device=device, dtype=torch.float32)
+        elif isinstance(bias, torch.Tensor):
+             bias_tensor = bias.to(device)
+        else:
+             bias_tensor = torch.tensor([0.5] * batch_size, device=device, dtype=torch.float32)
+
         for t in range(max_length):  
             # LSTM 1  
             lstm1_input = torch.cat([window, x], dim=1)  
@@ -146,7 +161,7 @@ class HandwritingRNN(nn.Module):
               
             # Attention  
             window, kappa, phi = self.attention(  
-                h1, window, kappa, x, embedded_chars, char_seq_lengths  
+                h1, window, kappa, x, char_one_hot, char_seq_lengths  
             )  
               
             # LSTM 2  
@@ -158,17 +173,19 @@ class HandwritingRNN(nn.Module):
             h3, c3 = self.lstm3(lstm3_input, (h3, c3))  
               
             # GMM output  
-            pis, mus, sigmas, rhos, es = self.gmm(h3, bias)  
+            pis, sigmas, rhos, mus, es = self.gmm(h3, bias_tensor)  
               
             # sample from GMM  
-            stroke = self.gmm.sample(pis, mus, sigmas, rhos, es)  
+            stroke = self.gmm.sample(pis, sigmas, rhos, mus, es)  
             strokes.append(stroke)  
               
             # update input for next step  
             x = stroke  
-              
-            if torch.all(stroke[:, 2] > 0.5):  
-                break  
           
         strokes = torch.stack(strokes, dim=1)  
-        return strokes  
+        filtered_strokes = []  
+        for i in range(batch_size):  
+            non_zero_mask = ~torch.all(strokes[i] == 0.0, dim=1)  
+            filtered_strokes.append(strokes[i, non_zero_mask])  
+        
+        return filtered_strokes

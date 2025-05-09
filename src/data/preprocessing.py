@@ -64,3 +64,17 @@ def create_mask(line_stroke, max_points=2048):
     mask = np.zeros(max_points, dtype=np.float32)
     mask[:min(n, max_points)] = 1
     return mask
+def normalize(offsets):  
+    """  
+    normalizes strokes to median unit norm  
+    """ 
+    esp = 1e-6
+
+    offsets = offsets.astype(np.float32) 
+    xy_offsets = offsets[:,:2] 
+    norms = np.linalg.norm(xy_offsets, axis=1) 
+
+    median_norm = np.median(norms)
+    if median_norm > esp:
+        offsets[:,:2] /= median_norm 
+    return offsets 
