@@ -42,7 +42,6 @@ def plot_stroke_seq(stroke_segments, title="Handwriting Stroke Visualization"):
     plt.title(title)
     plt.xlabel("X")
     plt.ylabel("Y")
-    plt.gca().invert_yaxis()  # To match the whiteboard's coordinate convention
     plt.legend()
 
     # save the plot 
@@ -115,7 +114,6 @@ def plot_offset_strokes(offset_strokes, title="Offset Stroke Visualization"):
     plt.title("Reconstructed Absolute Coordinates")
     plt.xlabel("X")
     plt.ylabel("Y")
-    plt.gca().invert_yaxis()
     plt.grid(True)
     
     plt.tight_layout()
@@ -140,6 +138,5 @@ def plot_stroke(stroke, title = "Stroke"):
     plt.title(title) 
     plt.xlabel("X") 
     plt.ylabel("Y") 
-    plt.gca().invert_yaxis() 
     plt.legend() 
     plt.show() 
