@@ -38,7 +38,6 @@ def get_lr_scheduler(optimizer, scheduler_type='plateau', patience=5, factor=0.5
             mode='min',  
             factor=factor,  
             patience=patience,  
-            verbose= 'True'  
         )  
     elif scheduler_type.lower() == 'step':  
         return optim.lr_scheduler.StepLR(  
