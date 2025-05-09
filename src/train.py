@@ -3,7 +3,6 @@ import torch
 import torch.multiprocessing as mp
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data import random_split
-from torch.utils.data.distributed import DistributedSampler
 import torch.distributed as dist
 from src.models.handwriting_rnn import HandwritingRNN
 from src.trainer import HandwritingTrainer
@@ -12,7 +11,7 @@ from src.data.dataloader import ProcessedHandwritingDataset
 def setup(rank, world_size):
     """Initialize distributed training process group"""
     os.environ['MASTER_ADDR'] = 'localhost'
-    os.environ['MASTER_PORT'] = '12355'
+    os.environ['MASTER_PORT'] = '29500'
     dist.init_process_group("nccl", rank=rank, world_size=world_size)
 
 def cleanup():
@@ -52,8 +51,7 @@ def train(rank, world_size):
         lstm_size=400,
         output_mixture_components=20,
         attention_mixture_components=10,
-        char_embedding_size=32,
-        alphabet_size=82
+        alphabet_size= ProcessedHandwritingDataset.get_alphabet_size() 
     )
     
     model.to(device)
@@ -64,7 +62,7 @@ def train(rank, world_size):
         model=ddp_model,
         train_dataset=train_dataset,
         val_dataset=val_dataset,
-        batch_sizes=[32, 64, 64],
+        batch_sizes=[192,192,192],
         learning_rates=[0.0001, 0.00005, 0.00002],
         beta1_decays=[0.9, 0.9, 0.9],
         patiences=[1500, 1000, 500],
@@ -73,7 +71,7 @@ def train(rank, world_size):
         num_training_steps=100000,
         checkpoint_dir='checkpoints',
         log_dir='logs',
-        log_interval=20,
+        log_interval=5,
         device=device,
         world_size=world_size,
         rank=rank
@@ -81,7 +79,7 @@ def train(rank, world_size):
     
     # start training
     if rank == 0:
-        print("Starting distributed training...")
+        print("Starting training...")
     best_step = trainer.fit()
     if rank == 0:
         print(f"Training completed. Best model at step {best_step}")
