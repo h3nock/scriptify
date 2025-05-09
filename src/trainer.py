@@ -17,7 +17,7 @@ class HandwritingTrainer:
         model,  
         train_dataset,  
         val_dataset,  
-        batch_sizes=[32, 64, 64],  
+        batch_sizes=[212, 212, 212],  
         learning_rates=[0.0001, 0.00005, 0.00002],  
         beta1_decays=[0.9, 0.9, 0.9],  
         patiences=[1500, 1000, 500],  
@@ -143,10 +143,10 @@ class HandwritingTrainer:
         c_len = batch['chars_len'].to(self.device)  
           
         # forward pass  
-        (pis, mus, sigmas, rhos, es), _ = self.model(x, c, c_len)  
+        (pis, sigmas, rhos, mus, es), _ = self.model(x, c, c_len)  
           
         # calculate loss  
-        sequence_loss, element_loss = gaussian_mixture_loss(y, x_len, pis, mus, sigmas, rhos, es)  
+        sequence_loss, element_loss = gaussian_mixture_loss(y, x_len, pis, sigmas, rhos, mus, es)  
         loss = element_loss  
           
         # backward pass  
@@ -177,9 +177,9 @@ class HandwritingTrainer:
                 c = batch['chars'].to(self.device)  
                 c_len = batch['chars_len'].to(self.device)  
                   
-                (pis, mus, sigmas, rhos, es), _ = self.model(x, c, c_len)  
+                (pis, sigmas, rhos, mus, es), _ = self.model(x, c, c_len)  
                   
-                _, element_loss = gaussian_mixture_loss(y, x_len, pis, mus, sigmas, rhos, es)  
+                _, element_loss = gaussian_mixture_loss(y, x_len, pis, sigmas, rhos, mus, es)  
                 val_losses.append(element_loss.item())  
 
         local_avg_loss = np.mean(val_losses) 
@@ -243,8 +243,8 @@ class HandwritingTrainer:
           
         # initialize training history  
         train_loss_history = deque(maxlen=100)  
-        val_loss_history = deque(maxlen=100)  
-          
+        latest_epoch_val_loss = float('nan') 
+
         # initialize best validation metrics  
         best_val_loss = float('inf')  
         best_val_step = 0  
@@ -279,16 +279,14 @@ class HandwritingTrainer:
                 train_loss_history.append(train_loss) 
 
                 if step % self.log_interval == 0:
+                    #TODO: handle distributed cases properly  
                     avg_train_loss = sum(train_loss_history) / len(train_loss_history) 
-                    if len(val_loss_history) > 0:
-                        avg_val_loss = sum(val_loss_history)  / len(val_loss_history)
-                    else:
-                        avg_val_loss = "N/A" 
+                    val_loss_display = f"{latest_epoch_val_loss:.6f}" if not np.isnan(latest_epoch_val_loss) else "N/A"
 
                     self.logger.info(
                         f"Epoch {epoch}, Step {step}: "
                         f"Train Loss: {avg_train_loss:.6f}, "
-                        f"Val Loss: {avg_val_loss}, "
+                        f"Val Loss (Last Epoch): {val_loss_display}, "
                         f"LR: {self.optimizer.param_groups[0]['lr']:.6f}"
                     )
                 step += 1 
@@ -296,8 +294,8 @@ class HandwritingTrainer:
             val_start = time.time()
             val_loss = self.validate()
             val_time = time.time() - val_start
-            val_loss_history.append(val_loss)
-            
+
+            latest_epoch_val_loss = val_loss  
             # log epoch summary
             epoch_train_loss = sum(epoch_train_losses) / len(epoch_train_losses)
             epoch_duration = time.time() - epoch_start_time
