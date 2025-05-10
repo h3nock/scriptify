@@ -1,5 +1,8 @@
 import os
+import numpy as np
 import matplotlib.pyplot as plt
+
+from src.data.preprocessing import offsets_to_stroke_coords
 
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
 OUTPUT_DIR = os.path.join(PROJECT_ROOT, "outputs")
@@ -56,6 +59,9 @@ def plot_offset_strokes(offset_strokes, title="Offset Stroke Visualization"):
     """
     Visualize stroke sequences in their offset representation.
     """
+    if isinstance(offset_strokes, np.ndarray) and offset_strokes.ndim == 2:
+        offset_strokes = [offset_strokes] 
+    
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     
     plt.figure(figsize=(10, 8))
