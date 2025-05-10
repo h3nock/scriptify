@@ -181,11 +181,23 @@ class HandwritingRNN(nn.Module):
               
             # update input for next step  
             x = stroke  
-          
-        strokes = torch.stack(strokes, dim=1)  
-        filtered_strokes = []  
-        for i in range(batch_size):  
-            non_zero_mask = ~torch.all(strokes[i] == 0.0, dim=1)  
-            filtered_strokes.append(strokes[i, non_zero_mask])  
+            
+            # early stopping criteria 
+            pen_up   = (stroke[:, 2] > 0.5).all()
+            tiny_mv  = (stroke[:, :2].abs().max() < 0.05).all()
+            if pen_up and tiny_mv:
+                pen_up_ctr += 1
+            else:
+                pen_up_ctr = 0
+
+            if (phi[:, -1] > 0.98).all():
+                done_ctr += 1
+            else:
+                done_ctr = 0
+
+            if pen_up_ctr >= 6 or done_ctr >= 5:
+                break
+
+        strokes = torch.stack(strokes, dim=1)          
+        return [seq for seq in strokes]
         
-        return filtered_strokes
