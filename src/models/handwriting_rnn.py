@@ -12,18 +12,23 @@ class HandwritingRNN(nn.Module):
                  lstm_size=400,   
                  output_mixture_components=20,   
                  attention_mixture_components=10,  
-                 alphabet_size = ProcessedHandwritingDataset.get_alphabet_size() 
+                 alphabet_size = ProcessedHandwritingDataset.get_alphabet_size(), 
+                 dropout_prob = 0.2
                  ):  
         super(HandwritingRNN, self).__init__()  
         self.lstm_size = lstm_size  
         self.output_mixture_components = output_mixture_components  
         self.attention_mixture_components = attention_mixture_components  
         self.alphabet_size = alphabet_size
+        self.dropout_prob = dropout_prob 
 
         # LSTM layers  
         self.lstm1 = nn.LSTMCell(3 + self.alphabet_size, self.lstm_size)  # Input + window vector  
         self.lstm2 = nn.LSTMCell(3 + self.lstm_size + self.alphabet_size, self.lstm_size)  # Input + lstm1 output + window  
         self.lstm3 = nn.LSTMCell(3 + self.lstm_size + self.alphabet_size, self.lstm_size)  # Input + lstm2 output + window  
+
+        if self.dropout_prob > 0:
+            self.dropout = nn.Dropout(p = self.dropout_prob)
           
         # attention mechanism  
         self.attention = AttentionMechanism(  
@@ -73,22 +78,37 @@ class HandwritingRNN(nn.Module):
             # LSTM 1  
             lstm1_input = torch.cat([window, x_t], dim=1)  
             h1, c1 = self.lstm1(lstm1_input, (h1, c1))  
+
+            if self.dropout_prob > 0 and self.training:
+                h1_d = self.dropout(h1) 
+            else:
+                h1_d = h1 
               
             # Attention  
             window, kappa, phi = self.attention(  
-                h1, window, kappa, x_t, char_one_hot, char_seq_lengths  
+                h1_d, window, kappa, x_t, char_one_hot, char_seq_lengths  
             )  
               
             # LSTM 2  
-            lstm2_input = torch.cat([x_t, h1, window], dim=1)  
+            lstm2_input = torch.cat([x_t, h1_d, window], dim=1)  
             h2, c2 = self.lstm2(lstm2_input, (h2, c2))  
+
+            if self.dropout_prob > 0 and self.training:
+                h2_d = self.dropout(h2)
+            else:
+                h2_d = h2
               
             # LSTM 3  
-            lstm3_input = torch.cat([x_t, h2, window], dim=1)  
+            lstm3_input = torch.cat([x_t, h2_d, window], dim=1)  
             h3, c3 = self.lstm3(lstm3_input, (h3, c3))  
-              
+            
+            if self.dropout_prob > 0 and self.training:
+                h3_d = self.dropout(h3) 
+            else:
+                h3_d = h3 
+                
             # GMM output  
-            gmm_params = self.gmm(h3, bias)  
+            gmm_params = self.gmm(h3_d, bias)  
             outputs.append(gmm_params)  
           
         stacked_outputs = [torch.stack([out[i] for out in outputs], dim=1) for i in range(5)]  
@@ -101,7 +121,10 @@ class HandwritingRNN(nn.Module):
     def sample(self, char_seq, char_seq_lengths, max_length=1000, bias=0.5, prime=None):  
         batch_size = char_seq.size(0)  
         device = char_seq.device  
-          
+        
+        pen_up_ctr = 0 
+        done_ctr = 0
+        
         # embed character sequence  
         char_one_hot = self.one_hot_encode(char_seq) 
           
