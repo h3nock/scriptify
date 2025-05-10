@@ -6,7 +6,7 @@
 /checkpoints/
 /checkpoints_bkp/ 
 /logs/
-/training_log.txt
+/training_log*.txt
 
 # Byte-compiled / optimized files
 __pycache__/
