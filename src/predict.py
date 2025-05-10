@@ -37,12 +37,11 @@ def load_model_for_prediction(checkpoint_path, device):
 
 def encode_text(text, alphabet, device):
     """Encodes text into a tensor of character indices."""
-    char_to_index = {char: idx for idx, char in enumerate(alphabet)}
-    encoded_list = [char_to_index.get(c, 0) for c in text] # 0 for unknown chars
-    encoded_np = np.array([encoded_list], dtype=np.int64) 
-    c = torch.tensor(encoded_np, device=device) # Batch size of 1
-    c_len = torch.tensor([len(text)], device=device)
-    return c, c_len
+    char_to_idx = {c: i for i, c in enumerate(alphabet)}
+    idxs = [char_to_idx.get(c, 0) for c in text] + [0]      
+    c   = torch.tensor([idxs], dtype=torch.long, device=device)  
+    c_len  = torch.tensor([len(idxs)], dtype=torch.long, device=device)
+    return c, c_len 
 
 def predict_handwriting(model, text_to_generate, alphabet, device, max_length=1000, bias=0.75):
     """Generates handwriting for the given text."""
