@@ -236,10 +236,17 @@ class HandwritingTrainer:
         self.logger.info(f"Loaded checkpoint from {checkpoint_path}")  
         return step  
       
-    def fit(self, warm_start_step=0):  
+    def fit(self, warm_start_step=None):  
         """Train the model"""  
         # load checkpoint if warm starting  
-        step = self.load_checkpoint(warm_start_step) if warm_start_step > 0 else 0  
+        if warm_start_step is None:
+            self.logger.info("warm_start_step is None, attempting to load the latest checkpoint") 
+            step = self.load_checkpoint()
+        elif warm_start_step > 0:
+            step = self.load_checkpoint(warm_start_step)
+        else:
+            step = 0 
+            self.logger.info("warm_start_step is 0, starting training from scratch.")
           
         # initialize training history  
         train_loss_history = deque(maxlen=100)  
