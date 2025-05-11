@@ -1,6 +1,6 @@
 import torch.optim as optim  
   
-def get_optimizer(model, optimizer_type='adam', learning_rate=0.001, beta1=0.9, weight_decay=1e-6):  
+def get_optimizer(model, optimizer_type='adam', learning_rate=0.001, beta1=0.9, weight_decay=1e-5):  
     """  
     Configure optimizer for the model  
     """  
