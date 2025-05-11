@@ -16,4 +16,6 @@ __pycache__/
 *$py.class
 
 /temp.py 
+
+# ignore nfs temp files 
 .nfs*
