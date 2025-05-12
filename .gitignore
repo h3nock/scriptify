@@ -4,8 +4,10 @@
 /data/
 /outputs/
 /checkpoints/
+/checkpoints*/
 /checkpoints_bkp/ 
 /logs/
+/logs*/
 /training_log*.txt
 
 # Byte-compiled / optimized files
@@ -14,3 +16,4 @@ __pycache__/
 *$py.class
 
 /temp.py 
+.nfs*
