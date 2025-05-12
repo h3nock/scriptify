@@ -63,6 +63,7 @@ def main():
     parser.add_argument("--bias", type=float, default=0.5, help="Sampling bias (temperature). Lower values make it more deterministic.")
     parser.add_argument("--output_file", type=str, default=None, help="Optional path to save the generated strokes as a .npy file.")
     parser.add_argument("--no_cuda", action="store_true", help="Disable CUDA even if available.")
+    parser.add_argument("--num_generations", type=int, default=5, help="Number of times to generate handwriting for the same input.")
     
     args = parser.parse_args()
 
@@ -78,24 +79,33 @@ def main():
     try:
         model = load_model_for_prediction(args.checkpoint, device)
         
-        print(f"\nGenerating handwriting for: '{args.text}'")
-        generated_strokes = predict_handwriting(
-            model, 
-            args.text, 
-            alphabet, 
-            device, 
-            max_length=args.max_length, 
-            bias=args.bias
-        )
+        print(f"\nGenerating {args.num_generations} handwriting samples for: '{args.text}' with bias: {args.bias}")
         
-        print(f"Generated strokes shape: {generated_strokes.shape}")
+        all_generated_strokes = []
+        for i in [0, 0.5, 0.75, 0.9, 1, 1.25, 1.5, 2,3, 4]:
+            print(f"\nGenerating handwriting for: '{args.text}'")
+            generated_strokes = predict_handwriting(
+                model, 
+                args.text, 
+                alphabet, 
+                device, 
+                max_length=args.max_length, 
+                bias= i
+            )
+            if generated_strokes.size > 0:
+                all_generated_strokes.append(generated_strokes)
+                print(f"Generated strokes shape: {generated_strokes.shape}")
+            else:
+                print("Failed to generate strokes for this attempt.")
 
-        plot_offset_strokes(generated_strokes, title=f"Generated: '{args.text}'")
+        if not all_generated_strokes:
+            print("No strokes were generated successfully for any attempt.")
+            return
         
-        if args.output_file:
-            np.save(args.output_file, generated_strokes)
-            print(f"Generated strokes saved to {args.output_file}")
-            
+        print(f"\nPlotting {len(all_generated_strokes)} generated samples")
+        for i, strokes in enumerate(all_generated_strokes):
+            plot_offset_strokes(strokes,args.text + '_' + str(i))
+             
     except FileNotFoundError as e:
         print(f"Error: {e}")
     except Exception as e:
