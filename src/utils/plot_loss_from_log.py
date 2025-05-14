@@ -1,30 +1,52 @@
 import re
 import os
+import numpy as np
 import matplotlib.pyplot as plt
 
 script_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..')
-LOG_FILE_PATH = os.path.join(script_dir, 'training_log.txt')
+LOG_FILE_PATH = os.path.join(script_dir,'logs_droput', 'training_logs.txt')
 LOG_FILE_PATH = os.path.normpath(LOG_FILE_PATH)
-OUTPUT_FILE_PATH = os.path.join(script_dir, 'outputs', 'epoch_loss_plot.png')
+OUTPUT_FILE_PATH = os.path.join(script_dir, 'outputs', 'steps_loss_plot.png')
 
 
-def parse_epoch_losses_from_log(log_file_path):
+def parse_log_for_steps_and_losses(log_file_path):
     """
-    Parses epoch level training and validation loss values from the specified training log file focusing on epoch completion lines.
-    """
-    epochs = []
+    Parses epoch completion logs to get training/validation losses and calculates the cumulative training steps at the end of each of these logged epochs"""
+    steps_at_epoch_end = []
     train_losses_epoch = []
     val_losses_epoch = []
-
+    
+    steps_per_epoch = None
+    
+    # find steps per epoch 
+    steps_per_epoch_pattern = re.compile(r"Starting training for \d+ epochs \((\d+) steps per epoch\)")
+    
+    # regex for completed epoch logs 
     epoch_completed_pattern = re.compile(
-        r"Epoch\s+(?P<epoch>\d+)\s+completed.*?Train Loss:\s*(?P<train_loss>[\d.]+).*?Val Loss:\s*(?P<val_loss>[\d.]+)",
+        r"Epoch\s+(?P<epoch>\d+)\s+completed.*?Train Loss:\s*(?P<train_loss>[-]?[\d.]+).*?Val Loss:\s*(?P<val_loss>[-]?[\d.]+)",
         re.IGNORECASE
     )
 
     if not os.path.exists(log_file_path):
         print(f"Error: Log file '{log_file_path}' not found.")
-        return [],[],[]
-    
+        return [], [], []
+
+    # try to find steps_per_epoch from the log file
+    try:
+        with open(log_file_path, 'r') as f:
+            for line in f:
+                match_spe = steps_per_epoch_pattern.search(line)
+                if match_spe:
+                    steps_per_epoch = int(match_spe.group(1))
+                    break 
+            if steps_per_epoch is None:
+                print("Could not find 'steps per epoch' in the log file ('Starting training for ... (X steps per epoch)').")
+                return [], [], []
+    except Exception as e:
+        print(f"Error reading log file to find 'steps per epoch': {e}")
+        return [], [], []
+
+    # parse the epoch completion lines and calculate cumulative steps
     try:
         with open(log_file_path, 'r') as f:
             for line_num, line in enumerate(f, 1):
@@ -32,70 +54,82 @@ def parse_epoch_losses_from_log(log_file_path):
                 if not line:
                     continue
 
-                match = epoch_completed_pattern.search(line)
-                if match:
+                match_ec = epoch_completed_pattern.search(line)
+                if match_ec:
                     try:
-                        epoch = int(match.group("epoch"))
-                        train_loss = float(match.group("train_loss"))
-                        val_loss = float(match.group("val_loss"))
+                        epoch = int(match_ec.group("epoch")) # 0-indexed epoch number
+                        train_loss = float(match_ec.group("train_loss"))
+                        val_loss = float(match_ec.group("val_loss"))
                         
-                        epochs.append(epoch)
+                        current_total_steps = (epoch + 1) * steps_per_epoch
+                        
+                        steps_at_epoch_end.append(current_total_steps)
                         train_losses_epoch.append(train_loss)
                         val_losses_epoch.append(val_loss)
                     except ValueError as e:
-                        print(f"Warning: couldn't parse float from matched groups on line {line_num}: {line.strip()} - {e}")
+                        print(f"couldn't parse line {line_num}: {line.strip()} - {e}")
                     except IndexError:
-                        print(f"Warning: regex matched but could not find all groups on line {line_num}: {line.strip()}")
-    except FileNotFoundError:
-        print(f"Log file '{log_file_path}' not found during read attempt.")
-        return [], [], []
+                        print(f"regex matched but could not find all groups on line {line_num}: {line.strip()}")
     except Exception as e:
-        print(f"Unexpected error occurred while reading the log file: {e}")
+        print(f"unexpected error occurred while reading the log file for epoch data: {e}")
         return [], [], []
                         
-    return epochs, train_losses_epoch, val_losses_epoch
+    return steps_at_epoch_end, train_losses_epoch, val_losses_epoch
 
-def plot_epoch_losses(epochs, train_losses, val_losses, output_file_path="epoch_loss_plot.png"):
+def plot_losses_vs_steps(steps_data, train_losses, val_losses, output_file_path="steps_loss_plot_32.png"):
     """
-    Plots the epoch level training and validation losses and saves the plot to a file
-    """
-    if not epochs:
-        print("No epoch data found to plot. Please check your log file format and the regex pattern.")
+    Plots the training and validation losses against training steps and saves the plot"""
+    if not steps_data:
+        print("No data found to plot, check your log file format")
         return
 
-    plt.figure(figsize=(12, 7))
+    plt.figure(figsize=(14, 8))
     
-    plt.plot(epochs, train_losses, marker='o', linestyle='-', label='Epoch Training Loss')
-    plt.plot(epochs, val_losses, marker='x', linestyle='--', label='Epoch Validation Loss')
+    plt.plot(steps_data, train_losses, linestyle='-', linewidth=2, label='Training Loss')
+    plt.plot(steps_data, val_losses, linestyle='--', linewidth=2, label='Validation Loss')
             
-    plt.title('Training and Validation Loss per Epoch')
-    plt.xlabel('Epoch')
+    plt.title('Training and Validation Loss vs. Training Steps')
+    plt.xlabel('Training Steps')
     plt.ylabel('Loss Value')
-    plt.legend()
-    plt.grid(True)
+    plt.legend(loc='best')
+    plt.grid(True, linestyle=':', linewidth=0.7, alpha=0.7)
     
-    if len(epochs) > 20:
-        tick_spacing = max(1, len(epochs) // 10) 
-        plt.xticks(epochs[::tick_spacing])
-    elif epochs:
-        plt.xticks(epochs)
+    min_step = min(steps_data) if steps_data else 0
+    max_step = max(steps_data) if steps_data else 1
+    # add a small padding to xlim
+    padding = (max_step - min_step) * 0.01 if (max_step - min_step) > 0 else 1
+    plt.xlim(min_step - padding, max_step + padding)
 
-    plt.tight_layout()
+    num_ticks_desired = 10
+    if len(steps_data) > num_ticks_desired:
+        tick_indices = np.linspace(0, len(steps_data) - 1, num_ticks_desired, dtype=int)
+        x_ticks = [steps_data[i] for i in tick_indices]
+        if steps_data[0] not in x_ticks: 
+             x_ticks[0] = steps_data[0]
+        if steps_data[-1] not in x_ticks: 
+             x_ticks[-1] = steps_data[-1]
+        x_ticks = sorted(list(set(x_ticks))) 
+        plt.xticks(x_ticks, rotation=30, ha='right')
+    elif steps_data:
+        plt.xticks(steps_data, rotation=30, ha='right')
+
+    plt.tight_layout(pad=1.5)
     
     try:
-        plt.savefig(output_file_path)
+        plt.savefig(output_file_path, dpi=200, bbox_inches='tight')
         print(f"Plot saved to {output_file_path}")
     except Exception as e:
         print(f"Error saving plot to {output_file_path}: {e}")
     
-    plt.close() 
+    plt.close()
 
 if __name__ == "__main__":
     log_file_path = LOG_FILE_PATH 
-    output_file_path = OUTPUT_FILE_PATH
-    parsed_epochs, parsed_train_losses, parsed_val_losses = parse_epoch_losses_from_log(log_file_path=log_file_path)
+    output_file_path = OUTPUT_FILE_PATH 
     
-    if parsed_epochs: # check if any epoch data was successfully parsed
-        plot_epoch_losses(parsed_epochs, parsed_train_losses, parsed_val_losses, output_file_path = output_file_path)
+    parsed_steps, parsed_train_losses, parsed_val_losses = parse_log_for_steps_and_losses(log_file_path=log_file_path)
+    
+    if parsed_steps:
+        plot_losses_vs_steps(parsed_steps, parsed_train_losses, parsed_val_losses, output_file_path = output_file_path)
     else:
-        print(f"No data was extracted from '{log_file_path}' or the file was not found.")
+        print(f"no data was extracted from '{log_file_path}' or the file was not found/parsable for steps.")
