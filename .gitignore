@@ -2,7 +2,7 @@
 .vscode 
 .venv/
 /data/
-/outputs/
+/outputs*/
 /checkpoints/
 /checkpoints*/
 /checkpoints_bkp/ 
