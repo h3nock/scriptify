@@ -7,12 +7,17 @@ import torch.distributed as dist
 from src.models.handwriting_rnn import HandwritingRNN
 from src.trainer import HandwritingTrainer
 from src.data.dataloader import ProcessedHandwritingDataset
+from config.config import load_config 
+
+config = load_config()
 
 def setup(rank, world_size):
     """Initialize distributed training process group"""
-    os.environ['MASTER_ADDR'] = 'localhost'
-    os.environ['MASTER_PORT'] = '29500'
-    dist.init_process_group("nccl", rank=rank, world_size=world_size)
+    #TODO: handle distributed training config params later 
+    dist_config = config.distributed_training
+    os.environ['MASTER_ADDR'] = dist_config.master_addr
+    os.environ['MASTER_PORT'] = str(dist_config.master_port)
+    dist.init_process_group(dist_config.backend, rank=rank, world_size=world_size)
 
 def cleanup():
     """Clean up distributed training process group"""
@@ -29,13 +34,12 @@ def train(rank, world_size):
     print(f"Running training on GPU {rank}")
     
     # load dataset
-    processed_dir = 'data/processed'
-    full_dataset = ProcessedHandwritingDataset(processed_dir)
+    full_dataset = ProcessedHandwritingDataset(config.paths.processed_data_dir)
     
-    # split dataset (90% train, 10% validation)
-    generator = torch.Generator().manual_seed(42)
+    # split dataset 
+    generator = torch.Generator().manual_seed(config.dataset.random_seed)
     dataset_size = len(full_dataset)
-    train_size = int(0.9 * dataset_size)
+    train_size = int(config.dataset.train_split_ration * dataset_size)
     val_size = dataset_size - train_size
     train_dataset, val_dataset = random_split(
         full_dataset, [train_size, val_size], generator=generator
@@ -48,9 +52,9 @@ def train(rank, world_size):
     
     # init model
     model = HandwritingRNN(
-        lstm_size=400,
-        output_mixture_components=20,
-        attention_mixture_components=10,
+        lstm_size=config.model_params.lstm_size,
+        output_mixture_components=config.model_params.output_mixture_components,
+        attention_mixture_components= config.model_params.attention_mixture_components,
         alphabet_size= ProcessedHandwritingDataset.get_alphabet_size() 
     )
     
@@ -62,16 +66,8 @@ def train(rank, world_size):
         model=ddp_model,
         train_dataset=train_dataset,
         val_dataset=val_dataset,
-        batch_sizes=[192,192,192],
-        learning_rates=[0.0001, 0.00005, 0.00002],
-        beta1_decays=[0.9, 0.9, 0.9],
-        patiences=[1500, 1000, 500],
-        optimizer_type='adam',
-        grad_clip=10.0,
-        num_training_steps=100000,
-        checkpoint_dir='checkpoints',
-        log_dir='logs',
-        log_interval=5,
+        training_params=config.training_params, 
+        paths_config=config.paths, 
         device=device,
         world_size=world_size,
         rank=rank
