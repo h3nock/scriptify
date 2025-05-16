@@ -1,0 +1,32 @@
+#config.yaml 
+paths:
+  processed_data_dir: "data/processed"
+  checkpoints_dir: "outputs/checkpoints"
+  logs_dir: "outputs/logs"
+  plots_dir: "outputs/plots" 
+
+dataset:
+  train_split_ration: 0.9 
+  random_seed: 42
+
+model_params:
+  lstm_size: 400 
+  output_mixture_components: 20 
+  attention_mixture_components: 10 
+  dropout_prob: 0.2 
+  eps: 0.00000001 # 1e-8 
+  sigma_eps: 0.0001 # 1e-4
+
+training_params:
+  batch_sizes: [192, 192, 192]
+  learning_rates: [0.0001, 0.00005, 0.00002]
+  beta1_decays: [0.9, 0.9, 0.9]
+  weight_decay: 0.00001
+  patiences: [1500, 1000, 500] 
+  optimizer_type: "adam" 
+  grad_clip: 10.0
+  num_training_steps: 100000
+  log_interval: 10
+
+prediction_params:
+  max_length: 1200
