@@ -2,6 +2,7 @@
 .vscode 
 .venv/
 /data/
+/outputs/
 /outputs*/
 /checkpoints/
 /checkpoints*/
@@ -19,3 +20,6 @@ __pycache__/
 
 # ignore nfs temp files 
 .nfs*
+
+#ignore env't vars 
+.env 
