@@ -23,3 +23,6 @@ __pycache__/
 
 #ignore env't vars 
 .env 
+
+#ignore wandb files 
+wandb/
