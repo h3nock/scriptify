@@ -14,7 +14,7 @@ class Paths(BaseModel):
     raw_data_root: Path
     raw_ascii_subdir_name: str = "ascii"
     raw_line_strokes_name: str = "lineStrokes"
-    raw_original_xml_subdir_name = "original"
+    raw_original_xml_subdir_name: str = "original"
     log_filename: str = "training.log"
     processed_data_dir: Path 
     checkpoints_dir: Path 
