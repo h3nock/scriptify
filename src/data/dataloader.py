@@ -1,19 +1,17 @@
-import os 
 import numpy as np 
 import torch 
+from pathlib import Path
 from torch.utils.data import Dataset, DataLoader
-
 from src.utils.stroke_viz import plot_offset_strokes
 
 class ProcessedHandwritingDataset(Dataset):
-    def __init__(self, processed_dir):
-        self.strokes = np.load(os.path.join(processed_dir, "strokes.npy"))
-        self.strokes_len = np.load(os.path.join(processed_dir, "strokes_len.npy"))
-        self.chars = np.load(os.path.join(processed_dir, "chars.npy"))
-        self.chars_len = np.load(os.path.join(processed_dir, "chars_len.npy"))
-        self.writer_ids = np.load(os.path.join(processed_dir, "writer_ids.npy"))
+    def __init__(self, processed_dir: Path):
+        self.strokes = np.load(processed_dir / "strokes.npy")
+        self.strokes_len = np.load(processed_dir / "strokes_len.npy")
+        self.chars = np.load(processed_dir / "chars.npy")
+        self.chars_len = np.load(processed_dir / "chars_len.npy")
+        self.writer_ids = np.load(processed_dir / "writer_ids.npy")
         print(f"Loaded {self.strokes.shape[0]} samples.")
-        plot_offset_strokes(self.strokes[5:6]) 
 
     @staticmethod
     def get_alphabet():
@@ -39,7 +37,9 @@ class ProcessedHandwritingDataset(Dataset):
         }
 
 if __name__ == '__main__':
-    processed_dir = 'data/processed' 
+    from config.config import load_config 
+    config = load_config()
+    processed_dir = config.paths.processed_data_dir 
     dataset = ProcessedHandwritingDataset(processed_dir=processed_dir) 
     dataloader = DataLoader(dataset, batch_size = 32, shuffle = True)
 
