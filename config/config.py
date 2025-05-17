@@ -4,21 +4,37 @@ import yaml
 from dotenv import load_dotenv
 from pathlib import Path
 from typing import Union 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, ValidationInfo, field_validator
 
 load_dotenv()
 
 PROJECT_ROOT  =  Path(__file__).resolve().parent.parent 
 
 class Paths(BaseModel):
+    raw_data_root: Path
+    raw_ascii_subdir_name: str = "ascii"
+    raw_line_strokes_name: str = "lineStrokes"
+    raw_original_xml_subdir_name = "original"
+    log_filename: str = "training.log"
     processed_data_dir: Path 
     checkpoints_dir: Path 
     logs_dir: Path
     plots_dir: Path 
+    
+    _path_fields = {
+        "raw_data_root",
+        "processed_data_dir",
+        "checkpoints_dir",
+        "logs_dir",
+        "plots_dir"
+    }
 
     @field_validator('*', mode='before')
     @classmethod 
-    def resolve_to_abs_path(cls, v: Union[str, Path]) -> Path: 
+    def resolve_to_abs_path(cls, v: Union[str, Path], info: ValidationInfo) -> Union[str,Path]: 
+        if info.field_name not in cls._path_fields:
+            return v
+
         if isinstance(v, str):
             path_obj = Path(v) 
             if not path_obj.is_absolute():
@@ -29,10 +45,24 @@ class Paths(BaseModel):
                 return (PROJECT_ROOT / v).resolve() 
             return v.resolve() 
         raise ValueError("Path must be a string or Path object")
+    
+    @property 
+    def raw_ascii_dir(self) -> Path:
+        return self.raw_data_root / self.raw_ascii_subdir_name 
 
+    @property 
+    def raw_line_strokes_dir(self) -> Path:
+        return self.raw_data_root / self.raw_line_strokes_name 
+    
+    @property 
+    def raw_original_xml_dir(self) -> Path:
+        return self.raw_data_root / self.raw_original_xml_subdir_name
 class Dataset(BaseModel):
     train_split_ration: float = Field(0.9, ge=0.0, le=1.0) 
     random_seed: int = 42
+    max_stroke_len: int = Field(1200, gt=0)
+    max_text_len: int = Field(80, gt=0)
+    offset_filter_threshold: int = Field(60, gt=0)
 
 class ModelParams(BaseModel): 
     lstm_size: int = Field(400, ge=0)

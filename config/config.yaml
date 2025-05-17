@@ -1,6 +1,7 @@
 #config.yaml 
 paths:
   processed_data_dir: "data/processed"
+  raw_data_root: "data/raw"
   checkpoints_dir: "outputs/checkpoints"
   logs_dir: "outputs/logs"
   plots_dir: "outputs/plots" 
@@ -8,6 +9,9 @@ paths:
 dataset:
   train_split_ration: 0.9 
   random_seed: 42
+  max_stroke_len: 1200 
+  max_text_len: 80 
+  offset_filter_threshold: 60
 
 model_params:
   lstm_size: 400 
