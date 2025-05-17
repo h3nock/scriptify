@@ -43,9 +43,9 @@ class HandwritingTrainer:
         self.checkpoint_dir: Path = paths_config.checkpoints_dir  
         self.log_dir: Path = paths_config.logs_dir  
         self.device = device if device is not None else torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-          
-        os.makedirs(self.checkpoint_dir, exist_ok=True)  
-        os.makedirs(self.log_dir, exist_ok=True)  
+        
+        self.checkpoint_dir.mkdir(parents=True,exist_ok=True)
+        self.log_dir.mkdir(parents=True, exist_ok=True)
           
         # Setup logging  
         logging.basicConfig(  
@@ -194,8 +194,7 @@ class HandwritingTrainer:
     def save_checkpoint(self, step, val_loss):  
         """Save model checkpoint"""  
         if self.rank == 0:
-            checkpoint_path = os.path.join(self.checkpoint_dir, f'model-{step}')  
-
+            checkpoint_path = self.checkpoint_dir / f'model-{step}' 
             torch.save({  
                 'step': step,  
                 'model_state_dict': self.model.state_dict(),  
@@ -209,17 +208,17 @@ class HandwritingTrainer:
         """Load model checkpoint"""  
         if step is None:  
             # find latest checkpoint 
-            checkpoints = [f for f in os.listdir(self.checkpoint_dir) if f.startswith('model-')]  
+            checkpoints = [p for p in self.checkpoint_dir.glob(f"model-*") if p.is_file()]
             if not checkpoints:  
                 self.logger.info("No checkpoints found, starting from scratch")  
                 return 0  
               
             # extract step numbers and find the latest  
-            steps = [int(f.split('-')[1]) for f in checkpoints]  
+            steps = [int(f.name.split('-')[1]) for f in checkpoints]  
             step = max(steps)  
           
-        checkpoint_path = os.path.join(self.checkpoint_dir, f'model-{step}')  
-        if not os.path.exists(checkpoint_path):  
+        checkpoint_path = self.checkpoint_dir / f'model-{step}'
+        if not checkpoint_path.exists():  
             self.logger.error(f"Checkpoint {checkpoint_path} not found")  
             return 0  
           
