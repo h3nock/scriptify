@@ -1,5 +1,6 @@
 import os  
 import time  
+import yaml 
 import numpy as np  
 import torch  
 from torch.utils.data import DataLoader  
@@ -7,26 +8,19 @@ from collections import deque
 import logging
 from torch.utils.data.distributed import DistributedSampler 
 from src.data.dataloader import ProcessedHandwritingDataset
-
 from .loss import gaussian_mixture_loss  
 from .optimizer import get_optimizer, get_lr_scheduler  
-  
+from config.config import TrainingParams, Paths 
+from pathlib import Path 
+ 
 class HandwritingTrainer:  
     def __init__(  
         self,  
         model,  
         train_dataset,  
         val_dataset,  
-        batch_sizes=[212, 212, 212],  
-        learning_rates=[0.0001, 0.00005, 0.00002],  
-        beta1_decays=[0.9, 0.9, 0.9],  
-        patiences=[1500, 1000, 500],  
-        optimizer_type='adam',  
-        grad_clip=10.0,  
-        num_training_steps=100000,  
-        checkpoint_dir='checkpoints',  
-        log_dir='logs',  
-        log_interval=20,  
+        training_params: TrainingParams, 
+        paths_config: Paths,
         device=None, 
         world_size =1, 
         rank=0  
@@ -36,27 +30,29 @@ class HandwritingTrainer:
         self.rank = rank   
         self.train_dataset = train_dataset  
         self.val_dataset = val_dataset  
-        self.batch_sizes = batch_sizes  
-        self.learning_rates = learning_rates  
-        self.beta1_decays = beta1_decays  
-        self.patiences = patiences  
-        self.optimizer_type = optimizer_type  
-        self.grad_clip = grad_clip  
-        self.num_training_steps = num_training_steps  
-        self.checkpoint_dir = checkpoint_dir  
-        self.log_dir = log_dir  
-        self.log_interval = log_interval  
+        # unpack training params 
+        self.batch_sizes = training_params.batch_sizes  
+        self.learning_rates = training_params.learning_rates  
+        self.beta1_decays = training_params.beta1_decays  
+        self.patiences = training_params.patiences  
+        self.optimizer_type = training_params.optimizer_type  
+        self.grad_clip = training_params.grad_clip  
+        self.num_training_steps = training_params.num_training_steps  
+        self.log_interval = training_params.log_interval  
+        # unpack paths 
+        self.checkpoint_dir: Path = paths_config.checkpoints_dir  
+        self.log_dir: Path = paths_config.logs_dir  
         self.device = device if device is not None else torch.device('cuda' if torch.cuda.is_available() else 'cpu')
           
-        os.makedirs(checkpoint_dir, exist_ok=True)  
-        os.makedirs(log_dir, exist_ok=True)  
+        os.makedirs(self.checkpoint_dir, exist_ok=True)  
+        os.makedirs(self.log_dir, exist_ok=True)  
           
         # Setup logging  
         logging.basicConfig(  
             level=logging.INFO,  
             format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',  
             handlers=[  
-                logging.FileHandler(os.path.join(log_dir, 'training.log')),  
+                logging.FileHandler(self.log_dir / 'training.log'),  
                 logging.StreamHandler()  
             ]  
         )  

@@ -3,6 +3,7 @@
 .venv/
 /data/
 /outputs/
+/outputs*/
 /checkpoints/
 /checkpoints*/
 /checkpoints_bkp/ 
@@ -19,3 +20,6 @@ __pycache__/
 
 # ignore nfs temp files 
 .nfs*
+
+#ignore env't vars 
+.env 

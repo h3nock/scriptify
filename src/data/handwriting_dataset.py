@@ -1,14 +1,8 @@
-import os
-from idna import encode
 import numpy as np 
+from pathlib import Path
 from src.data.loader import get_writerID, get_text_line_by_line, get_stroke_seqs, list_files 
-from src.data.preprocessing import normalize, pad_line, create_mask, stroke_coords_to_offsets
-from src.utils.stroke_viz import plot_stroke_seq
-
-
-FIXED_MAX_STROKE_LEN = 1200
-FIXED_MAX_TEXT_LEN = 80
-FILTER_THRESHOLD = 60
+from src.data.preprocessing import normalize, stroke_coords_to_offsets
+from config.config import Paths as PathsConfig, Dataset as DatasetParams
 
 class OnlineHandwritingDataset:
     """
@@ -18,17 +12,18 @@ class OnlineHandwritingDataset:
     its associated stroke data obtained from lineStrokes folder. 
     """
 
-    def __init__(self, ascii_root, extreme_threshold = FILTER_THRESHOLD):
+    def __init__(self, paths_config: PathsConfig, dataset_params: DatasetParams):
         """
         Params: 
             ascii_root: Dirctory containing text files. 
             extreme_threshold: max allowed distance between two consecutive stroke points
         """
-
-        self.ascii_files = list_files(ascii_root) 
-        self.extreme_threshold = extreme_threshold 
-        self.MAX_STROKE_LENGTH = FIXED_MAX_STROKE_LEN
-        self.MAX_TEXT_LENGTH = FIXED_MAX_TEXT_LEN
+        self.paths_config = paths_config
+        self.ascii_root_path: Path = paths_config.raw_ascii_dir
+        self.ascii_files: list[Path] = list_files(self.ascii_root_path) 
+        self.extreme_threshold = dataset_params.offset_filter_threshold 
+        self.MAX_STROKE_LENGTH = dataset_params.max_stroke_len
+        self.MAX_TEXT_LENGTH = dataset_params.max_text_len
         self.ALPHABET = ['\x00',' ', '!', '"', '#', "'", '(', ')', '+', ',', '-', '.', '/', '0', '1', '2', '3', '4', 
                     '5', '6', '7', '8', '9', ':', ';', '?', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 
                     'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', 'a', 'b', 
@@ -59,35 +54,40 @@ class OnlineHandwritingDataset:
         texts_per_line = []
         strokes_per_line = []
         writerIDs = []
-        for ascii_file in self.ascii_files: 
-            # sample ascii_file: ascii/a01/a01-000/a01-000u.txt 
+        for ascii_file_path in self.ascii_files: 
+            # sample ascii_file_path: ascii/a01/a01-000/a01-000u.txt 
 
-            text_lines = get_text_line_by_line(ascii_file) 
-
-            # head: ascii/a01/a01-000/, tail: a01-000u.txt 
-            head, tail = os.path.split(ascii_file) 
-
-            # stroke_file_base: lineStrokes/a01/a01-000 
-            stroke_files_base = head.replace("ascii", "lineStrokes")
+            text_lines: list[str] = get_text_line_by_line(ascii_file_path)  
             
-            last_char = os.path.splitext(tail)[0][-1] 
+            # relative_dir = a01/a01-000/, given ascii_file_path = ascii/a01/a01-000/a01-000u.txt  
+            relative_dir = ascii_file_path.parent.relative_to(self.ascii_root_path)
+
+            # stroke_file_base: .../lineStrokes/a01/a01-000 
+            stroke_files_base = self.paths_config.raw_line_strokes_dir / relative_dir 
+            # orginal_xml_base_dir 
+            original_xml_base_dir = self.paths_config.raw_original_xml_dir / relative_dir 
+            
+            last_char = ascii_file_path.stem[-1]
             if not last_char.isalpha():
                 last_char = "" 
-            if not os.path.isdir(stroke_files_base):
+            
+            if not stroke_files_base.is_dir():
                 continue 
-            # stroke_file_name_prefix: a01-000u-
-            stroke_file_name_prefix = os.path.split(stroke_files_base)[-1] + last_char + "-"
 
+            # stroke_file_name_prefix: a01-000u-
+            stroke_file_name_prefix = ascii_file_path.parent.name + last_char + "-"
             # list of filenames where each file corresponds to stroke respresentation of a single text line 
-            stroke_files = sorted([os.path.join(stroke_files_base, f) for f in os.listdir(stroke_files_base) if f.startswith(stroke_file_name_prefix)]) 
+            stroke_files: list[Path] = sorted(stroke_files_base.glob(f"{stroke_file_name_prefix}*"))
 
             if not stroke_files or len(stroke_files) != len(text_lines):
                 continue
 
-            original_root_folder = head.replace("ascii", "original")
-            original_xml_path = os.path.join(original_root_folder,"strokes" + last_char + ".xml")  
-            writerID = get_writerID(original_xml_path) 
+            original_xml_path = original_xml_base_dir / f"strokes{last_char}.xml"
 
+            if not original_xml_path.exists():
+                continue 
+
+            writerID = get_writerID(original_xml_path) 
             # curr_text_strokes = []
 
             for i,stroke_file in enumerate(stroke_files):
@@ -143,21 +143,24 @@ class OnlineHandwritingDataset:
 
 
 if __name__ == "__main__":
-    dataset = OnlineHandwritingDataset("data/raw/ascii")
+    from config.config import load_config 
+    config = load_config() 
+
+    dataset = OnlineHandwritingDataset(paths_config=config.paths, dataset_params=config.dataset)
     data = dataset._load_samples()
     
     print(f"ALPHABET_SIZE: {dataset.ALPHABET_SIZE}")
     print(f"MAX_TEXT_LENGTH: {dataset.MAX_TEXT_LENGTH}")
     print(f"MAX_STROKE_LENGTH: {dataset.MAX_STROKE_LENGTH}")
 
-    processed_dir = "data/processed"
-    if not os.path.isdir(processed_dir):
-        os.makedirs(processed_dir)
+    processed_dir = config.paths.processed_data_dir
+    if not processed_dir.exists():
+        processed_dir.mkdir(parents=True,exist_ok=True)
     
-    np.save(os.path.join(processed_dir, "strokes.npy"), data['strokes'])
-    np.save(os.path.join(processed_dir, "strokes_len.npy"), data['strokes_len'])
-    np.save(os.path.join(processed_dir, "chars.npy"), data['chars'])
-    np.save(os.path.join(processed_dir, "chars_len.npy"), data['chars_len'])
-    np.save(os.path.join(processed_dir, "writer_ids.npy"), data['writer_ids'])
+    np.save(processed_dir/ "strokes.npy", data['strokes'])
+    np.save(processed_dir/ "strokes_len.npy", data['strokes_len'])
+    np.save(processed_dir/ "chars.npy", data['chars'])
+    np.save(processed_dir/ "chars_len.npy", data['chars_len'])
+    np.save(processed_dir/ "writer_ids.npy", data['writer_ids'])
 
     print("Processed data saved successfully.")
