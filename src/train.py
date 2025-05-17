@@ -32,7 +32,6 @@ def train(rank, world_size):
     # set device for this process
     device = torch.device(f"cuda:{rank}")
     torch.cuda.set_device(device)
-    print(f"Running training on GPU {rank}")
     
     # load dataset
     full_dataset = ProcessedHandwritingDataset(config_global.paths.processed_data_dir)
@@ -46,7 +45,27 @@ def train(rank, world_size):
         full_dataset, [train_size, val_size], generator=generator
     )
     
+    wandb_run = None 
     if rank == 0:
+        if config_global.wandb.enabled:
+            hyperparams = {
+                **config_global.dataset.model_dump(),
+                **config_global.model_params.model_dump(),
+                **config_global.training_params.model_dump(),
+                **config_global.distributed_training.model_dump(), 
+                "world_size": world_size,
+                "device_type": device.type,
+            }
+                
+            wandb_run = wandb.init(
+                project=config_global.wandb.project_name,
+                name=config_global.wandb.run_name, 
+                config=hyperparams, 
+                tags=config_global.wandb.tags, 
+                notes=config_global.wandb.notes,
+                resume="allow"
+            )
+            
         print(f"Dataset loaded: {dataset_size} samples")
         print(f"Training set: {train_size} samples")
         print(f"Validation set: {val_size} samples")
@@ -60,6 +79,8 @@ def train(rank, world_size):
     )
     
     model.to(device)
+    if rank == 0 and wandb_run and config_global.wandb.watch_model_log_freq > 0:
+        wandb.watch(model, log="gradients", log_freq=config_global.wandb.watch_model_log_freq)
     ddp_model = DDP(model, device_ids=[rank])
     
     # init trainer 
@@ -69,6 +90,7 @@ def train(rank, world_size):
         val_dataset=val_dataset,
         training_params=config_global.training_params, 
         paths_config=config_global.paths, 
+        wandb_config=config_global.wandb,
         device=device,
         world_size=world_size,
         rank=rank
@@ -78,8 +100,11 @@ def train(rank, world_size):
     if rank == 0:
         print("Starting training...")
     best_step = trainer.fit()
+
     if rank == 0:
         print(f"Training completed. Best model at step {best_step}")
+        if wandb_run:
+            wandb_run.finish() 
     
     # clean up
     cleanup()
