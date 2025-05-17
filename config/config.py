@@ -21,30 +21,24 @@ class Paths(BaseModel):
     logs_dir: Path
     plots_dir: Path 
     
-    _path_fields = {
+    @field_validator(
         "raw_data_root",
         "processed_data_dir",
         "checkpoints_dir",
         "logs_dir",
-        "plots_dir"
-    }
-
-    @field_validator('*', mode='before')
+        "plots_dir", mode='before')
     @classmethod 
     def resolve_to_abs_path(cls, v: Union[str, Path], info: ValidationInfo) -> Union[str,Path]: 
-        if info.field_name not in cls._path_fields:
-            return v
-
         if isinstance(v, str):
             path_obj = Path(v) 
-            if not path_obj.is_absolute():
-                return (PROJECT_ROOT / path_obj).resolve()
-            return path_obj.resolve() 
         elif isinstance(v, Path):
-            if not v.is_absolute():
-                return (PROJECT_ROOT / v).resolve() 
-            return v.resolve() 
-        raise ValueError("Path must be a string or Path object")
+            path_obj = v
+        else:
+            raise ValueError("Path must be a string or Path object")
+        
+        if not path_obj.is_absolute():
+                return (PROJECT_ROOT / path_obj).resolve()
+        return path_obj.resolve() 
     
     @property 
     def raw_ascii_dir(self) -> Path:
@@ -99,8 +93,8 @@ class Config(BaseModel):
     model_params: ModelParams 
     training_params: TrainingParams 
     prediction_params: PredictionParams 
-    distributed_training: DistributedTrainingConfig
-
+    distributed_training: DistributedTrainingConfig = Field(default_factory=DistributedTrainingConfig)
+    
 DEFAULT_CONFIG_PATH = PROJECT_ROOT / "config" / "config.yaml"
 ENV_VAR_CONFIG_PATH_NAME = "SCRIPTIFY_CONFIG_PATH"
 
