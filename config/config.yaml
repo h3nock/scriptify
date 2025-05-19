@@ -34,3 +34,10 @@ training_params:
 
 prediction_params:
   max_length: 1200
+
+wandb:
+  enabled: true
+  project_name: "Scriptify"
+  tags: ['initial_setup', 'scriptify']
+  log_model_checkpoint_freq: 0 # just mean log best model only 
+  watch_model_log_freq: 100

@@ -86,7 +86,16 @@ class DistributedTrainingConfig(BaseSettings):
     backend: str = "nccl"
     master_addr: str = "localhost"
     master_port: int = 29500
-    
+
+class WandBConfig(BaseModel):
+    enabled: bool = Field(True, description="enable weights and biases logging") 
+    project_name: str = Field("Scriptify")
+    run_name: Union[str, None] = Field(None)
+    tags: list[str] = Field(default_factory=list)
+    notes: Union[str, None] = Field(None)
+    log_model_checkpoint_freq: int = Field(0)
+    watch_model_log_freq: int = Field(100)
+
 class Config(BaseModel):
     paths: Paths
     dataset: Dataset 
@@ -94,7 +103,8 @@ class Config(BaseModel):
     training_params: TrainingParams 
     prediction_params: PredictionParams 
     distributed_training: DistributedTrainingConfig = Field(default_factory=DistributedTrainingConfig)
-    
+    wandb: WandBConfig
+     
 DEFAULT_CONFIG_PATH = PROJECT_ROOT / "config" / "config.yaml"
 ENV_VAR_CONFIG_PATH_NAME = "SCRIPTIFY_CONFIG_PATH"
 

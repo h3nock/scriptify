@@ -1,6 +1,5 @@
-import os  
 import time  
-import yaml 
+import wandb
 import numpy as np  
 import torch  
 from torch.utils.data import DataLoader  
@@ -10,7 +9,7 @@ from torch.utils.data.distributed import DistributedSampler
 from src.data.dataloader import ProcessedHandwritingDataset
 from .loss import gaussian_mixture_loss  
 from .optimizer import get_optimizer, get_lr_scheduler  
-from config.config import TrainingParams, Paths 
+from config.config import TrainingParams, Paths, WandBConfig
 from pathlib import Path 
  
 class HandwritingTrainer:  
@@ -21,6 +20,7 @@ class HandwritingTrainer:
         val_dataset,  
         training_params: TrainingParams, 
         paths_config: Paths,
+        wandb_config: WandBConfig,
         device=None, 
         world_size =1, 
         rank=0  
@@ -30,6 +30,9 @@ class HandwritingTrainer:
         self.rank = rank   
         self.train_dataset = train_dataset  
         self.val_dataset = val_dataset  
+        self.training_params = training_params
+        self.paths_config = paths_config 
+        self.wandb_config = wandb_config
         # unpack training params 
         self.batch_sizes = training_params.batch_sizes  
         self.learning_rates = training_params.learning_rates  
@@ -43,9 +46,9 @@ class HandwritingTrainer:
         self.checkpoint_dir: Path = paths_config.checkpoints_dir  
         self.log_dir: Path = paths_config.logs_dir  
         self.device = device if device is not None else torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-          
-        os.makedirs(self.checkpoint_dir, exist_ok=True)  
-        os.makedirs(self.log_dir, exist_ok=True)  
+        
+        self.checkpoint_dir.mkdir(parents=True,exist_ok=True)
+        self.log_dir.mkdir(parents=True, exist_ok=True)
           
         # Setup logging  
         logging.basicConfig(  
@@ -194,8 +197,7 @@ class HandwritingTrainer:
     def save_checkpoint(self, step, val_loss):  
         """Save model checkpoint"""  
         if self.rank == 0:
-            checkpoint_path = os.path.join(self.checkpoint_dir, f'model-{step}')  
-
+            checkpoint_path = self.checkpoint_dir / f'model-{step}' 
             torch.save({  
                 'step': step,  
                 'model_state_dict': self.model.state_dict(),  
@@ -209,17 +211,17 @@ class HandwritingTrainer:
         """Load model checkpoint"""  
         if step is None:  
             # find latest checkpoint 
-            checkpoints = [f for f in os.listdir(self.checkpoint_dir) if f.startswith('model-')]  
+            checkpoints = [p for p in self.checkpoint_dir.glob(f"model-*") if p.is_file()]
             if not checkpoints:  
                 self.logger.info("No checkpoints found, starting from scratch")  
                 return 0  
               
             # extract step numbers and find the latest  
-            steps = [int(f.split('-')[1]) for f in checkpoints]  
+            steps = [int(f.name.split('-')[1]) for f in checkpoints]  
             step = max(steps)  
           
-        checkpoint_path = os.path.join(self.checkpoint_dir, f'model-{step}')  
-        if not os.path.exists(checkpoint_path):  
+        checkpoint_path = self.checkpoint_dir / f'model-{step}'
+        if not checkpoint_path.exists():  
             self.logger.error(f"Checkpoint {checkpoint_path} not found")  
             return 0  
           
@@ -281,7 +283,7 @@ class HandwritingTrainer:
                 epoch_train_losses.append(train_loss) 
                 train_loss_history.append(train_loss) 
 
-                if step % self.log_interval == 0:
+                if step % self.log_interval == 0 and self.rank == 0:
                     #TODO: handle distributed cases properly  
                     avg_train_loss = sum(train_loss_history) / len(train_loss_history) 
                     val_loss_display = f"{latest_epoch_val_loss:.6f}" if not np.isnan(latest_epoch_val_loss) else "N/A"
@@ -292,6 +294,14 @@ class HandwritingTrainer:
                         f"Val Loss (Last Epoch): {val_loss_display}, "
                         f"LR: {self.optimizer.param_groups[0]['lr']:.6f}"
                     )
+                    if self.wandb_config.enabled and wandb.run:
+                        wandb.log({
+                            "train/loss_step": train_loss,
+                            "train/loss_avg_hist": avg_train_loss,
+                            "learning_rate": self.optimizer.param_groups[0]['lr'],
+                            "epoch": epoch
+                        }, step=step)
+                        
                 step += 1 
 
             val_start = time.time()
@@ -303,11 +313,18 @@ class HandwritingTrainer:
             epoch_train_loss = sum(epoch_train_losses) / len(epoch_train_losses)
             epoch_duration = time.time() - epoch_start_time
             
-            self.logger.info(
-                f"Epoch {epoch} completed in {epoch_duration:.2f}s: "
-                f"Train Loss: {epoch_train_loss:.6f}, "
-                f"Val Loss: {val_loss:.6f}"
-            )
+            if self.rank == 0:
+                self.logger.info(
+                    f"Epoch {epoch} completed in {epoch_duration:.2f}s: "
+                    f"Train Loss: {epoch_train_loss:.6f}, "
+                    f"Val Loss: {val_loss:.6f}"
+                )
+                if self.wandb_config.enabled and wandb.run:
+                    wandb.log({
+                        "epoch/train_loss_avg": epoch_train_loss,
+                        "epoch/val_loss": val_loss,
+                        "epoch/num": epoch
+                    }, step=step)
             
             # check for new best model
             if val_loss < best_val_loss:
