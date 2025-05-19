@@ -9,7 +9,7 @@ from torch.utils.data.distributed import DistributedSampler
 from src.data.dataloader import ProcessedHandwritingDataset
 from .loss import gaussian_mixture_loss  
 from .optimizer import get_optimizer, get_lr_scheduler  
-from config.config import TrainingParams, Paths, WandBConfig
+from config.config import TrainingParams, WandBConfig
 from pathlib import Path 
  
 class HandwritingTrainer:  
@@ -19,7 +19,7 @@ class HandwritingTrainer:
         train_dataset,  
         val_dataset,  
         training_params: TrainingParams, 
-        paths_config: Paths,
+        run_output_dir: Path,
         wandb_config: WandBConfig,
         device=None, 
         world_size =1, 
@@ -31,7 +31,6 @@ class HandwritingTrainer:
         self.train_dataset = train_dataset  
         self.val_dataset = val_dataset  
         self.training_params = training_params
-        self.paths_config = paths_config 
         self.wandb_config = wandb_config
         # unpack training params 
         self.batch_sizes = training_params.batch_sizes  
@@ -43,8 +42,8 @@ class HandwritingTrainer:
         self.num_training_steps = training_params.num_training_steps  
         self.log_interval = training_params.log_interval  
         # unpack paths 
-        self.checkpoint_dir: Path = paths_config.checkpoints_dir  
-        self.log_dir: Path = paths_config.logs_dir  
+        self.checkpoint_dir: Path = run_output_dir / 'checkpoints' 
+        self.log_dir: Path = run_output_dir / 'logs' 
         self.device = device if device is not None else torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         
         self.checkpoint_dir.mkdir(parents=True,exist_ok=True)

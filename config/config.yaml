@@ -2,9 +2,7 @@
 paths:
   processed_data_dir: "data/processed"
   raw_data_root: "data/raw"
-  checkpoints_dir: "outputs/checkpoints"
-  logs_dir: "outputs/logs"
-  plots_dir: "outputs/plots" 
+  outputs_dir: "outputs"
 
 dataset:
   train_split_ration: 0.9 

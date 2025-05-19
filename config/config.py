@@ -1,9 +1,9 @@
 import os
-from pydantic_settings import BaseSettings, SettingsConfigDict
 import yaml 
-from dotenv import load_dotenv
 from pathlib import Path
 from typing import Union 
+from dotenv import load_dotenv
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import BaseModel, Field, ValidationInfo, field_validator
 
 load_dotenv()
@@ -17,16 +17,13 @@ class Paths(BaseModel):
     raw_original_xml_subdir_name: str = "original"
     log_filename: str = "training.log"
     processed_data_dir: Path 
-    checkpoints_dir: Path 
-    logs_dir: Path
-    plots_dir: Path 
+    outputs_dir: Path
     
     @field_validator(
         "raw_data_root",
+        "outputs_dir",
         "processed_data_dir",
-        "checkpoints_dir",
-        "logs_dir",
-        "plots_dir", mode='before')
+        mode='before')
     @classmethod 
     def resolve_to_abs_path(cls, v: Union[str, Path], info: ValidationInfo) -> Union[str,Path]: 
         if isinstance(v, str):
@@ -51,6 +48,10 @@ class Paths(BaseModel):
     @property 
     def raw_original_xml_dir(self) -> Path:
         return self.raw_data_root / self.raw_original_xml_subdir_name
+    
+    @property 
+    def runs_dir(self) -> Path:
+        return self.outputs_dir / "runs"
 class Dataset(BaseModel):
     train_split_ration: float = Field(0.9, ge=0.0, le=1.0) 
     random_seed: int = 42

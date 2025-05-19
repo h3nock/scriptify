@@ -1,6 +1,7 @@
 import os
 import torch
 import wandb 
+from datetime import datetime 
 import torch.multiprocessing as mp
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data import random_split
@@ -47,6 +48,12 @@ def train(rank, world_size):
     
     wandb_run = None 
     if rank == 0:
+        base_runs_path = config_global.paths.outputs_dir
+        base_runs_path.mkdir(parents=True, exist_ok=True)
+        run_dir_name = f"run_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        run_output_dir = base_runs_path / run_dir_name 
+        run_output_dir.mkdir(parents=True, exist_ok=True) 
+        
         if config_global.wandb.enabled:
             hyperparams = {
                 **config_global.dataset.model_dump(),
@@ -59,7 +66,7 @@ def train(rank, world_size):
                 
             wandb_run = wandb.init(
                 project=config_global.wandb.project_name,
-                name=config_global.wandb.run_name, 
+                name= run_dir_name, 
                 config=hyperparams, 
                 tags=config_global.wandb.tags, 
                 notes=config_global.wandb.notes,
@@ -89,7 +96,7 @@ def train(rank, world_size):
         train_dataset=train_dataset,
         val_dataset=val_dataset,
         training_params=config_global.training_params, 
-        paths_config=config_global.paths, 
+        run_output_dir=run_output_dir, 
         wandb_config=config_global.wandb,
         device=device,
         world_size=world_size,
