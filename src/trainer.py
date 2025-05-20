@@ -20,6 +20,7 @@ class HandwritingTrainer:
         val_dataset,  
         training_params: TrainingParams, 
         run_output_dir: Path,
+        config_file_path: Path, 
         wandb_config: WandBConfig,
         device=None, 
         world_size =1, 
@@ -31,6 +32,7 @@ class HandwritingTrainer:
         self.train_dataset = train_dataset  
         self.val_dataset = val_dataset  
         self.training_params = training_params
+        self.config_file_path = config_file_path
         self.wandb_config = wandb_config
         # unpack training params 
         self.batch_sizes = training_params.batch_sizes  
@@ -193,10 +195,11 @@ class HandwritingTrainer:
         else:
             return local_avg_loss 
       
-    def save_checkpoint(self, step, val_loss):  
+    def save_checkpoint(self, epoch, step, val_loss):  
         """Save model checkpoint"""  
         if self.rank == 0:
-            checkpoint_path = self.checkpoint_dir / f'model-{step}' 
+            file_name = f'model-{step}'
+            checkpoint_path = self.checkpoint_dir / file_name  
             torch.save({  
                 'step': step,  
                 'model_state_dict': self.model.state_dict(),  
@@ -204,8 +207,26 @@ class HandwritingTrainer:
                 'val_loss': val_loss,  
                 'restart_idx': self.restart_idx  
             }, checkpoint_path)  
-            self.logger.info(f"Saved checkpoint to {checkpoint_path}")  
-          
+            self.logger.info(f"Saved checkpoint locally to {checkpoint_path}")  
+            
+            # save to wandb 
+            if self.wandb_config.enabled and wandb.run:
+                model_artifact = wandb.Artifact(
+                    name="scriptify", 
+                    type="model", 
+                    description=f"Handwriting model checkpoint. Step: {step}, Epoch: {epoch}, Val Loss: {val_loss:.4f}",
+                    metadata={
+                        'step': step,
+                        'epoch': epoch,
+                        'validation_loss': val_loss,
+                        'learning_rate': self.optimizer.param_groups[0]['lr'],
+                    }
+                )
+                model_artifact.add_file(str(checkpoint_path),name=file_name)
+                model_artifact.add_file(str(self.config_file_path), name="config.yaml") 
+               
+                wandb.log_artifact(model_artifact) 
+                self.logger.info(f"Logged model artifact to WandB")
     def load_checkpoint(self, step=None):  
         """Load model checkpoint"""  
         if step is None:  
@@ -329,7 +350,7 @@ class HandwritingTrainer:
             if val_loss < best_val_loss:
                 best_val_loss = val_loss
                 best_val_step = step
-                self.save_checkpoint(step, val_loss)
+                self.save_checkpoint(epoch,step, val_loss)
                 
             # check for early stopping
             if step - best_val_step > self.patience:

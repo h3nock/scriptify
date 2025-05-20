@@ -3,6 +3,7 @@ paths:
   processed_data_dir: "data/processed"
   raw_data_root: "data/raw"
   outputs_dir: "outputs"
+  config_file_path: "config/config.yaml"
 
 dataset:
   train_split_ration: 0.9 

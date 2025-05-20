@@ -16,12 +16,14 @@ class Paths(BaseModel):
     raw_line_strokes_name: str = "lineStrokes"
     raw_original_xml_subdir_name: str = "original"
     log_filename: str = "training.log"
+    config_file_path: Path
     processed_data_dir: Path 
     outputs_dir: Path
     
     @field_validator(
         "raw_data_root",
         "outputs_dir",
+        "config_file_path",
         "processed_data_dir",
         mode='before')
     @classmethod 

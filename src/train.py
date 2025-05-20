@@ -96,6 +96,7 @@ def train(rank, world_size):
         train_dataset=train_dataset,
         val_dataset=val_dataset,
         training_params=config_global.training_params, 
+        config_file_path=config_global.paths.config_file_path,
         run_output_dir=run_output_dir, 
         wandb_config=config_global.wandb,
         device=device,
