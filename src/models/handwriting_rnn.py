@@ -25,7 +25,7 @@ class HandwritingRNN(nn.Module):
         # LSTM layers  
         self.lstm1 = nn.LSTMCell(3 + self.alphabet_size, self.lstm_size)  # Input + window vector  
         self.lstm2 = nn.LSTMCell(3 + self.lstm_size + self.alphabet_size, self.lstm_size)  # Input + lstm1 output + window  
-        self.lstm3 = nn.LSTMCell(3 + self.lstm_size + self.alphabet_size, self.lstm_size)  # Input + lstm2 output + window  
+        self.lstm3 = nn.LSTMCell(3 + 2*self.lstm_size + self.alphabet_size, self.lstm_size)  # Input + lstm1 output + lstm2 output + window  
 
         if self.dropout_prob > 0:
             self.dropout = nn.Dropout(p = self.dropout_prob)
@@ -37,7 +37,7 @@ class HandwritingRNN(nn.Module):
             self.alphabet_size
         )  
           
-        self.gmm = GMMLayer(self.lstm_size, self.output_mixture_components)  
+        self.gmm = GMMLayer(3 * self.lstm_size, self.output_mixture_components)  
 
     def one_hot_encode(self, char_seq):
         return F.one_hot(char_seq, num_classes=self.alphabet_size,).float() 
@@ -99,7 +99,7 @@ class HandwritingRNN(nn.Module):
                 h2_d = h2
               
             # LSTM 3  
-            lstm3_input = torch.cat([x_t, h2_d, window], dim=1)  
+            lstm3_input = torch.cat([x_t,h1_d, h2_d, window], dim=1)  
             h3, c3 = self.lstm3(lstm3_input, (h3, c3))  
             
             if self.dropout_prob > 0 and self.training:
@@ -107,8 +107,9 @@ class HandwritingRNN(nn.Module):
             else:
                 h3_d = h3 
                 
-            # GMM output  
-            gmm_params = self.gmm(h3_d, bias)  
+            # GMM output 
+            gmm_input = torch.cat([h1_d,h2_d,h3_d], dim=1) 
+            gmm_params = self.gmm(gmm_input, bias)  
             outputs.append(gmm_params)  
           
         stacked_outputs = [torch.stack([out[i] for out in outputs], dim=1) for i in range(5)]  
@@ -162,7 +163,7 @@ class HandwritingRNN(nn.Module):
                 h2, c2 = self.lstm2(lstm2_input, (h2, c2))  
                   
                 # LSTM 3  
-                lstm3_input = torch.cat([x_t, h2, window], dim=1)  
+                lstm3_input = torch.cat([x_t,h1, h2, window], dim=1)  
                 h3, c3 = self.lstm3(lstm3_input, (h3, c3))  
                   
                 if t == prime_seq_length - 1:  
@@ -192,11 +193,12 @@ class HandwritingRNN(nn.Module):
             h2, c2 = self.lstm2(lstm2_input, (h2, c2))  
               
             # LSTM 3  
-            lstm3_input = torch.cat([x, h2, window], dim=1)  
+            lstm3_input = torch.cat([x, h1, h2, window], dim=1)  
             h3, c3 = self.lstm3(lstm3_input, (h3, c3))  
               
             # GMM output  
-            pis, sigmas, rhos, mus, es = self.gmm(h3, bias_tensor)  
+            gmm_input = torch.cat([h1, h2, h3], dim=1)
+            pis, sigmas, rhos, mus, es = self.gmm(gmm_input, bias_tensor)  
               
             # sample from GMM  
             stroke = self.gmm.sample(pis, sigmas, rhos, mus, es)  

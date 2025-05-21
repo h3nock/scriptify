@@ -37,6 +37,6 @@ prediction_params:
 wandb:
   enabled: true
   project_name: "Scriptify"
-  tags: ['initial_setup', 'scriptify']
+  tags: ['second_model_arch', 'scriptify']
   log_model_checkpoint_freq: 0 # just mean log best model only 
   watch_model_log_freq: 100
