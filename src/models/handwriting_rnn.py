@@ -208,8 +208,8 @@ class HandwritingRNN(nn.Module):
             x = stroke  
             
             # early stopping criteria 
-            pen_up   = (stroke[:, 2] > 0.5).all()
-            tiny_mv  = (stroke[:, :2].abs().max() < 0.05).all()
+            pen_up   = (stroke[:, 2] > 0.7).all()
+            tiny_mv  = (stroke[:, :2].abs().max() < 0.02).all()
             if pen_up and tiny_mv:
                 pen_up_ctr += 1
             else:
@@ -220,7 +220,7 @@ class HandwritingRNN(nn.Module):
             else:
                 done_ctr = 0
 
-            if pen_up_ctr >= 6 or done_ctr >= 5:
+            if pen_up_ctr >= 10 or done_ctr >= 8:
                 break
 
         strokes = torch.stack(strokes, dim=1)          
