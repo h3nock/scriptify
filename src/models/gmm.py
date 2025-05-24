@@ -45,7 +45,6 @@ class GMMLayer(nn.Module):
         pis = F.softmax(pis_logits, dim=-1)
         sigmas = torch.exp(sigmas_logits).clamp(min = self.sigma_eps) 
         rhos = torch.tanh(rhos).clamp(min = self.eps - 1.0, max=1.0 - self.eps) 
-        mus = torch.tanh(mus)  
         es = torch.sigmoid(es).clamp(min = self.eps, max = 1.0 - self.eps)
  
         return pis, sigmas, rhos, mus, es 
