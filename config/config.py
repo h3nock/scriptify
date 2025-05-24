@@ -65,7 +65,7 @@ class ModelParams(BaseModel):
     lstm_size: int = Field(400, ge=0)
     output_mixture_components: int = Field(20, gt=0)
     attention_mixture_components: int = Field(10, gt=0) 
-    dropout_prob: float = Field(0.2, gt=0.0, le=1.0)
+    dropout_prob: float = Field(0.2, ge=0.0, le=1.0)
     eps: float = Field(1e-8, ge=0) 
     sigma_eps: float = Field(1e-4, ge=0)
 
