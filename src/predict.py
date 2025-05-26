@@ -3,7 +3,7 @@ import numpy as np
 import argparse
 import os
 
-from src.models.handwriting_rnn import HandwritingRNN
+from src.models.rnn import HandwritingRNN
 from src.data.dataloader import ProcessedHandwritingDataset
 from src.utils.stroke_viz import plot_offset_strokes # Assuming you have this utility
 

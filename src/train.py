@@ -6,8 +6,8 @@ import torch.multiprocessing as mp
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data import random_split
 import torch.distributed as dist
-from src.models.handwriting_rnn import HandwritingRNN
-from src.trainer import HandwritingTrainer
+from src.models.rnn import HandwritingRNN
+from src.training.trainer import HandwritingTrainer
 from src.data.dataloader import ProcessedHandwritingDataset
 from config.config import load_config 
 
