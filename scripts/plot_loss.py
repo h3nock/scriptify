@@ -1,13 +1,13 @@
+from email.mime import base
 import re
 import os
+import argparse 
 import numpy as np
+from typing import Union
+from pathlib import Path
 import matplotlib.pyplot as plt
 
-script_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..')
-LOG_FILE_PATH = os.path.join(script_dir,'logs_droput', 'training_logs.txt')
-LOG_FILE_PATH = os.path.normpath(LOG_FILE_PATH)
-OUTPUT_FILE_PATH = os.path.join(script_dir, 'outputs', 'steps_loss_plot.png')
-
+from src.utils.paths import RunPaths
 
 def parse_log_for_steps_and_losses(log_file_path):
     """
@@ -123,13 +123,49 @@ def plot_losses_vs_steps(steps_data, train_losses, val_losses, output_file_path=
     
     plt.close()
 
-if __name__ == "__main__":
-    log_file_path = LOG_FILE_PATH 
-    output_file_path = OUTPUT_FILE_PATH 
-    
+def plot_loss(log_file_path, output_file_path):
     parsed_steps, parsed_train_losses, parsed_val_losses = parse_log_for_steps_and_losses(log_file_path=log_file_path)
+    plot_losses_vs_steps(parsed_steps, parsed_train_losses, parsed_val_losses, output_file_path = output_file_path)
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--run_name", 
+        type=str, 
+        default=None, 
+        help="Specific run name to plot"
+    )
     
-    if parsed_steps:
-        plot_losses_vs_steps(parsed_steps, parsed_train_losses, parsed_val_losses, output_file_path = output_file_path)
+    parser.add_argument(
+        "--base_outputs_dir", 
+        type=str, 
+        default="outputs", 
+        help="Base outputs directory"
+    )
+    
+    args = parser.parse_args() 
+    
+    if args.run_name:
+        run_path = RunPaths(run_name=args.run_name,base_outputs_dir=args.base_outputs_dir) 
     else:
-        print(f"no data was extracted from '{log_file_path}' or the file was not found/parsable for steps.")
+        run_paths = RunPaths.find_latest_run(base_outputs_dir=args.base_outputs_dir)
+        
+    if run_paths is None:
+        print("No runs found. Please specify --run-name")
+        exit(1) 
+    
+    output_file_path = run_paths.loss_plot 
+    output_file_path.parent.mkdir(parents=True, exist_ok=True) 
+
+    log_file_path = run_paths.training_log 
+    
+    if not log_file_path.exists():
+        print(f"Error: Log file not found at {log_file_path}")
+        exit(1) 
+    
+    print(f"Using run: {run_paths.run_name}")
+    print(f"Reading from: {log_file_path}")
+    print(f"Saving to: {output_file_path}")
+
+    plot_loss(log_file_path, output_file_path)

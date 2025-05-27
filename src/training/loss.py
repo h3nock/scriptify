@@ -27,7 +27,6 @@ def gaussian_mixture_loss(y, y_lengths, pis, sigmas, rhos,mus, es, eps=1e-8, sig
       
     # mixture probabilities  
     gmm_likelihood = torch.sum(pis * gaussian_likelihoods, dim=2).clamp(min=eps)
-    gmm_likelihood = torch.clamp(gmm_likelihood, min=eps)  
       
     # bernoulli likelihood for pen state  
     bernoulli_likelihood = torch.where(  
@@ -40,8 +39,6 @@ def gaussian_mixture_loss(y, y_lengths, pis, sigmas, rhos,mus, es, eps=1e-8, sig
     # mask padded values  
     mask = (torch.arange(seq_length, device=y.device)[None] < y_lengths[:,None])
     nll  = torch.where(mask, nll, torch.zeros_like(nll))
-    nll  = torch.where(torch.isnan(nll), torch.zeros_like(nll), nll)
-
       
     # calculate losses  
     sequence_loss = torch.sum(nll, dim=1) / y_lengths.float()  

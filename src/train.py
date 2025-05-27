@@ -1,4 +1,5 @@
 import os
+from typing import Optional
 import torch
 import wandb 
 from datetime import datetime 
@@ -6,10 +7,11 @@ import torch.multiprocessing as mp
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data import random_split
 import torch.distributed as dist
-from src.models.handwriting_rnn import HandwritingRNN
-from src.trainer import HandwritingTrainer
+from src.models.rnn import HandwritingRNN
+from src.training.trainer import HandwritingTrainer
 from src.data.dataloader import ProcessedHandwritingDataset
 from config.config import load_config 
+from src.utils.paths import RunPaths
 
 config_global = load_config()
 
@@ -46,14 +48,10 @@ def train(rank, world_size):
         full_dataset, [train_size, val_size], generator=generator
     )
     
+    run_paths = RunPaths(base_outputs_dir=config_global.paths.outputs_dir)
     wandb_run = None 
-    if rank == 0:
-        base_runs_path = config_global.paths.outputs_dir
-        base_runs_path.mkdir(parents=True, exist_ok=True)
-        run_dir_name = f"run_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-        run_output_dir = base_runs_path / run_dir_name 
-        run_output_dir.mkdir(parents=True, exist_ok=True) 
-        
+    if rank == 0: 
+        run_paths.create_directories() 
         if config_global.wandb.enabled:
             hyperparams = {
                 **config_global.dataset.model_dump(),
@@ -66,7 +64,7 @@ def train(rank, world_size):
                 
             wandb_run = wandb.init(
                 project=config_global.wandb.project_name,
-                name= run_dir_name, 
+                name= run_paths.run_name, 
                 config=hyperparams, 
                 tags=config_global.wandb.tags, 
                 notes=config_global.wandb.notes,
@@ -97,7 +95,7 @@ def train(rank, world_size):
         val_dataset=val_dataset,
         training_params=config_global.training_params, 
         config_file_path=config_global.paths.config_file_path,
-        run_output_dir=run_output_dir, 
+        run_paths=run_paths, 
         wandb_config=config_global.wandb,
         device=device,
         world_size=world_size,

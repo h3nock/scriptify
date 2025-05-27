@@ -11,6 +11,7 @@ from .loss import gaussian_mixture_loss
 from .optimizer import get_optimizer, get_lr_scheduler  
 from config.config import TrainingParams, WandBConfig
 from pathlib import Path 
+from src.utils.paths import RunPaths
  
 class HandwritingTrainer:  
     def __init__(  
@@ -19,7 +20,7 @@ class HandwritingTrainer:
         train_dataset,  
         val_dataset,  
         training_params: TrainingParams, 
-        run_output_dir: Path,
+        run_paths: RunPaths,
         config_file_path: Path, 
         wandb_config: WandBConfig,
         device=None, 
@@ -34,6 +35,7 @@ class HandwritingTrainer:
         self.training_params = training_params
         self.config_file_path = config_file_path
         self.wandb_config = wandb_config
+        self.run_paths = run_paths 
         # unpack training params 
         self.batch_sizes = training_params.batch_sizes  
         self.learning_rates = training_params.learning_rates  
@@ -44,19 +46,14 @@ class HandwritingTrainer:
         self.num_training_steps = training_params.num_training_steps  
         self.log_interval = training_params.log_interval  
         # unpack paths 
-        self.checkpoint_dir: Path = run_output_dir / 'checkpoints' 
-        self.log_dir: Path = run_output_dir / 'logs' 
         self.device = device if device is not None else torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         
-        self.checkpoint_dir.mkdir(parents=True,exist_ok=True)
-        self.log_dir.mkdir(parents=True, exist_ok=True)
-          
         # Setup logging  
         logging.basicConfig(  
             level=logging.INFO,  
             format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',  
             handlers=[  
-                logging.FileHandler(self.log_dir / 'training.log'),  
+                logging.FileHandler(self.run_paths.training_log),  
                 logging.StreamHandler()  
             ]  
         )  
@@ -111,13 +108,20 @@ class HandwritingTrainer:
             num_workers=4,
             pin_memory=True
         )
+
+        if self.optimizer is None:
+            self.optimizer = get_optimizer(  
+                self.model,  
+                optimizer_type=self.optimizer_type,  
+                learning_rate=self.learning_rate,  
+                beta1=self.beta1_decay  
+            )  
+        else:
+            for param_group in self.optimizer.param_groups:
+                param_group['lr'] = self.learning_rate
+                if 'betas' in param_group: # for Adam, AdamW
+                    param_group['betas'] = (self.beta1_decay, param_group['betas'][1])
         
-        self.optimizer = get_optimizer(  
-            self.model,  
-            optimizer_type=self.optimizer_type,  
-            learning_rate=self.learning_rate,  
-            beta1=self.beta1_decay  
-        )  
         
         self.scheduler = get_lr_scheduler(  
             self.optimizer,  
@@ -199,7 +203,7 @@ class HandwritingTrainer:
         """Save model checkpoint"""  
         if self.rank == 0:
             file_name = f'model-{step}'
-            checkpoint_path = self.checkpoint_dir / file_name  
+            checkpoint_path = self.run_paths.checkpoints_dir / file_name  
             torch.save({  
                 'step': step,  
                 'model_state_dict': self.model.state_dict(),  
@@ -231,7 +235,7 @@ class HandwritingTrainer:
         """Load model checkpoint"""  
         if step is None:  
             # find latest checkpoint 
-            checkpoints = [p for p in self.checkpoint_dir.glob(f"model-*") if p.is_file()]
+            checkpoints = [p for p in self.run_paths.checkpoints_dir.glob(f"model-*") if p.is_file()]
             if not checkpoints:  
                 self.logger.info("No checkpoints found, starting from scratch")  
                 return 0  
@@ -240,7 +244,7 @@ class HandwritingTrainer:
             steps = [int(f.name.split('-')[1]) for f in checkpoints]  
             step = max(steps)  
           
-        checkpoint_path = self.checkpoint_dir / f'model-{step}'
+        checkpoint_path = self.run_paths.checkpoints_dir / f'model-{step}'
         if not checkpoint_path.exists():  
             self.logger.error(f"Checkpoint {checkpoint_path} not found")  
             return 0  
@@ -272,8 +276,8 @@ class HandwritingTrainer:
 
         # initialize best validation metrics  
         best_val_loss = float('inf')  
-        best_val_step = 0  
-
+        best_val_step = step  
+        
         batch_size_per_gpu = self.batch_size
         total_batch_size = batch_size_per_gpu * self.world_size
         steps_per_epoch = max(1, len(self.train_dataset) // total_batch_size)
@@ -357,7 +361,7 @@ class HandwritingTrainer:
                 if self.restart_idx < len(self.batch_sizes) - 1:
                     # load best checkpoint 
                     self.logger.info(f"Validation loss plateaued. Moving to next training phase.")
-                    step = self.load_checkpoint(best_val_step)
+                    self.load_checkpoint(best_val_step)
                     self.restart_idx += 1
                     self.update_train_params()
                     best_val_loss = float('inf')
