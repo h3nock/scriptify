@@ -109,7 +109,7 @@ class HandwritingTrainer:
             pin_memory=True
         )
 
-        if self.optimizer is None:
+        if not hasattr(self, "optimizer") or self.optimizer is None:
             self.optimizer = get_optimizer(  
                 self.model,  
                 optimizer_type=self.optimizer_type,  
