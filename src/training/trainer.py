@@ -108,13 +108,20 @@ class HandwritingTrainer:
             num_workers=4,
             pin_memory=True
         )
+
+        if self.optimizer is None:
+            self.optimizer = get_optimizer(  
+                self.model,  
+                optimizer_type=self.optimizer_type,  
+                learning_rate=self.learning_rate,  
+                beta1=self.beta1_decay  
+            )  
+        else:
+            for param_group in self.optimizer.param_groups:
+                param_group['lr'] = self.learning_rate
+                if 'betas' in param_group: # for Adam, AdamW
+                    param_group['betas'] = (self.beta1_decay, param_group['betas'][1])
         
-        self.optimizer = get_optimizer(  
-            self.model,  
-            optimizer_type=self.optimizer_type,  
-            learning_rate=self.learning_rate,  
-            beta1=self.beta1_decay  
-        )  
         
         self.scheduler = get_lr_scheduler(  
             self.optimizer,  
@@ -269,8 +276,8 @@ class HandwritingTrainer:
 
         # initialize best validation metrics  
         best_val_loss = float('inf')  
-        best_val_step = 0  
-
+        best_val_step = step  
+        
         batch_size_per_gpu = self.batch_size
         total_batch_size = batch_size_per_gpu * self.world_size
         steps_per_epoch = max(1, len(self.train_dataset) // total_batch_size)
@@ -354,7 +361,7 @@ class HandwritingTrainer:
                 if self.restart_idx < len(self.batch_sizes) - 1:
                     # load best checkpoint 
                     self.logger.info(f"Validation loss plateaued. Moving to next training phase.")
-                    step = self.load_checkpoint(best_val_step)
+                    self.load_checkpoint(best_val_step)
                     self.restart_idx += 1
                     self.update_train_params()
                     best_val_loss = float('inf')
