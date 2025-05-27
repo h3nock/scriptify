@@ -1,23 +1,30 @@
-import torch
-import numpy as np
-import argparse
 import os
-
+from typing import Union
+import torch
+import argparse
+import numpy as np
+from pathlib import Path
 from src.models.rnn import HandwritingRNN
 from src.data.dataloader import ProcessedHandwritingDataset
-from src.utils.stroke_viz import plot_offset_strokes # Assuming you have this utility
+from src.utils.paths import RunPaths, find_latest_run_checkpoint
+from src.utils.stroke_viz import plot_offset_strokes 
+from config.config import load_config 
 
-def load_model_for_prediction(checkpoint_path, device):
+config_global = load_config()
+    
+def load_model_for_prediction(checkpoint_path: Union[str, Path], device):
     """Loads a trained model from a checkpoint."""
+    checkpoint_path = Path(checkpoint_path)
     if not os.path.exists(checkpoint_path):
         raise FileNotFoundError(f"Checkpoint not found at {checkpoint_path}")
 
     checkpoint = torch.load(checkpoint_path, map_location=device)
     
+    model_params  = config_global.model_params 
     model = HandwritingRNN(
-        lstm_size=400,
-        output_mixture_components=20, 
-        attention_mixture_components=10,
+        lstm_size=model_params.lstm_size,
+        output_mixture_components=model_params.output_mixture_components, 
+        attention_mixture_components=model_params.attention_mixture_components,
         alphabet_size=ProcessedHandwritingDataset.get_alphabet_size()
     )
     
@@ -25,7 +32,7 @@ def load_model_for_prediction(checkpoint_path, device):
     new_state_dict = {}
     for k, v in state_dict.items():
         if k.startswith('module.'):
-            new_state_dict[k[7:]] = v  # remove `module.`
+            new_state_dict[k[7:]] = v 
         else:
             new_state_dict[k] = v
     
@@ -43,7 +50,7 @@ def encode_text(text, alphabet, device):
     c_len  = torch.tensor([len(idxs)], dtype=torch.long, device=device)
     return c, c_len 
 
-def predict_handwriting(model, text_to_generate, alphabet, device, max_length=1000, bias=0.75):
+def predict_handwriting(model, text_to_generate, alphabet, device, max_length=1200, bias=0.75):
     """Generates handwriting for the given text."""
     model.eval()
     c, c_len = encode_text(text_to_generate, alphabet, device)
@@ -55,15 +62,20 @@ def predict_handwriting(model, text_to_generate, alphabet, device, max_length=10
     print("Warrning: model.sample returned no strokes") 
     return np.array([]) 
 
+def validate_bias(value: float):
+    fvalue = float(value)
+    if fvalue < 0.5:
+        raise argparse.ArgumentTypeError(f"Bias must be >= 0.5, got {fvalue}")
+    return fvalue 
+
 def main():
     parser = argparse.ArgumentParser(description="Generate handwriting from text using a trained model.")
-    parser.add_argument("--checkpoint", type=str, required=True, help="Path to the model checkpoint file (eg., checkpoints/model-XXXX).")
+    parser.add_argument("--checkpoint", type=str, default=None, help="Path to the model checkpoint file (eg., .../checkpoints/model-XXXX).")
     parser.add_argument("--text", type=str, required=True, help="Text to generate handwriting for.")
-    parser.add_argument("--max_length", type=int, default=1000, help="Maximum length of the generated stroke sequence.")
-    parser.add_argument("--bias", type=float, default=0.5, help="Sampling bias (temperature). Lower values make it more deterministic.")
+    parser.add_argument("--max_length", type=int, default=1200, help="Maximum length of the generated stroke sequence.")
+    parser.add_argument("--bias", type=float, default=1, help="Sampling bias (temperature). Lower values make it more deterministic.")
     parser.add_argument("--output_file", type=str, default=None, help="Optional path to save the generated strokes as a .npy file.")
     parser.add_argument("--no_cuda", action="store_true", help="Disable CUDA even if available.")
-    parser.add_argument("--num_generations", type=int, default=5, help="Number of times to generate handwriting for the same input.")
     
     args = parser.parse_args()
 
@@ -77,34 +89,40 @@ def main():
     alphabet = ProcessedHandwritingDataset.get_alphabet()
 
     try:
-        model = load_model_for_prediction(args.checkpoint, device)
+        checkpoint_path = None
+        if args.checkpoint is None:
+            checkpoint_path = find_latest_run_checkpoint()
+        else:
+            checkpoint_path = Path(args.checkpoint) 
         
-        print(f"\nGenerating {args.num_generations} handwriting samples for: '{args.text}' with bias: {args.bias}")
-        
-        all_generated_strokes = []
-        for i in [0, 0.5, 0.75, 0.9, 1, 1.25, 1.5, 2,3, 4]:
-            print(f"\nGenerating handwriting for: '{args.text}'")
+        if checkpoint_path: 
+            try:
+                run_name = checkpoint_path.parent.parent.name 
+                base_outputs_dir = checkpoint_path.parent.parent.parent
+                run_paths = RunPaths(run_name=run_name, base_outputs_dir=base_outputs_dir)
+                if not run_paths.run_dir.exists():
+                    run_paths = None 
+            except IndexError:
+                run_paths = None 
+            
+            if run_paths is None:
+                run_paths = RunPaths(run_name=f"predict_{checkpoint_path.stem}", base_outputs_dir=config_global.paths.outputs_dir)
+                run_paths.create_directories()
+            
+            model = load_model_for_prediction(checkpoint_path, device)
             generated_strokes = predict_handwriting(
                 model, 
                 args.text, 
                 alphabet, 
                 device, 
                 max_length=args.max_length, 
-                bias= i
+                bias=args.bias
             )
+            
             if generated_strokes.size > 0:
-                all_generated_strokes.append(generated_strokes)
-                print(f"Generated strokes shape: {generated_strokes.shape}")
-            else:
-                print("Failed to generate strokes for this attempt.")
-
-        if not all_generated_strokes:
-            print("No strokes were generated successfully for any attempt.")
-            return
-        
-        print(f"\nPlotting {len(all_generated_strokes)} generated samples")
-        for i, strokes in enumerate(all_generated_strokes):
-            plot_offset_strokes(strokes,args.text + '_' + str(i))
+                print(f"Generated Strokes Shape: {generated_strokes.shape}")
+                plot_offset_strokes(generated_strokes,run_paths.get_sample_plot_path(text=args.text), plot_only_text=True)
+    
              
     except FileNotFoundError as e:
         print(f"Error: {e}")
