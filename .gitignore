@@ -1,15 +1,8 @@
 .DS_Store
 .vscode 
 .venv/
-/data/
-/outputs/
-/outputs*/
-/checkpoints/
-/checkpoints*/
-/checkpoints_bkp/ 
-/logs/
-/logs*/
-/training_log*.txt
+ml/data/
+ml/outputs/
 
 # Byte-compiled / optimized files
 __pycache__/
@@ -25,4 +18,5 @@ __pycache__/
 .env 
 
 #ignore wandb files 
-wandb/
+ml/wandb/
+/wandb 
