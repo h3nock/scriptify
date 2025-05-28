@@ -10,9 +10,8 @@ from src.utils.paths import RunPaths, find_latest_run_checkpoint
 from src.utils.stroke_viz import plot_offset_strokes 
 from config.config import load_config 
 
-config_global = load_config()
     
-def load_model_for_prediction(checkpoint_path: Union[str, Path], device):
+def load_model_for_prediction(checkpoint_path: Union[str, Path],config, device):
     """Loads a trained model from a checkpoint."""
     checkpoint_path = Path(checkpoint_path)
     if not os.path.exists(checkpoint_path):
@@ -20,7 +19,7 @@ def load_model_for_prediction(checkpoint_path: Union[str, Path], device):
 
     checkpoint = torch.load(checkpoint_path, map_location=device)
     
-    model_params  = config_global.model_params 
+    model_params  = config.model_params 
     model = HandwritingRNN(
         lstm_size=model_params.lstm_size,
         output_mixture_components=model_params.output_mixture_components, 
@@ -96,20 +95,29 @@ def main():
             checkpoint_path = Path(args.checkpoint) 
         
         if checkpoint_path: 
+            run_config = None 
+            run_paths = None 
+            
             try:
                 run_name = checkpoint_path.parent.parent.name 
                 base_outputs_dir = checkpoint_path.parent.parent.parent
                 run_paths = RunPaths(run_name=run_name, base_outputs_dir=base_outputs_dir)
-                if not run_paths.run_dir.exists():
-                    run_paths = None 
+                if run_paths.run_dir.exists() and run_paths.config_copy.exists():
+                    run_config = load_config(run_paths.config_copy) 
+                else:
+                    run_config = load_config() 
+                    if not run_paths.run_dir.exists():
+                        run_paths = None 
             except IndexError:
+                run_config = load_config()
                 run_paths = None 
             
             if run_paths is None:
-                run_paths = RunPaths(run_name=f"predict_{checkpoint_path.stem}", base_outputs_dir=config_global.paths.outputs_dir)
+                run_config = load_config()
+                run_paths = RunPaths(run_name=f"predict_{checkpoint_path.stem}", base_outputs_dir=run_config.paths.outputs_dir)
                 run_paths.create_directories()
             
-            model = load_model_for_prediction(checkpoint_path, device)
+            model = load_model_for_prediction(checkpoint_path,run_config, device)
             generated_strokes = predict_handwriting(
                 model, 
                 args.text, 

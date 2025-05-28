@@ -52,6 +52,8 @@ def train(rank, world_size):
     wandb_run = None 
     if rank == 0: 
         run_paths.create_directories() 
+        run_paths.copy_config_file(config_global.paths.config_file_path)
+        
         if config_global.wandb.enabled:
             hyperparams = {
                 **config_global.dataset.model_dump(),

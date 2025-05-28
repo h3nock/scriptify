@@ -1,3 +1,4 @@
+import shutil 
 from datetime import datetime  
 from pathlib import Path 
 from typing import Union, Optional  
@@ -34,7 +35,15 @@ class RunPaths:
         ]
         for dir in dirs:
             dir.mkdir(parents=True, exist_ok=True)
-    
+
+    def copy_config_file(self, source_config_path: Union[str, Path]):
+        source_path = Path(source_config_path) 
+        if source_path.exists():
+            shutil.copy2(source_path, self.config_copy) 
+            print(f"Config file copied to {self.config_copy}")
+        else:
+            print(f"Warnning: Source config filt not found at {source_path}")
+         
     def get_training_plot_path(self, plot_name: str) -> Path:
         if not plot_name.endswith(".png"):
             plot_name += '.png' 
