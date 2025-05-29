@@ -159,7 +159,7 @@ def main():
     try:
         package_model(checkpoint_path, args.pkg_name, pkg_output_dir, config_file_path)
     except Exception as e:
-        print(f"An error occurred pakcing the model: {e}")
+        print(f"An error occurred packaging the model: {e}")
         traceback.print_exc()
     
     
