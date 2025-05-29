@@ -66,7 +66,8 @@ class RunPaths:
             
     
     @classmethod 
-    def find_latest_run(cls, base_outputs_dir: str = "outputs") -> Optional['RunPaths']:
+    def find_latest_run(cls, base_outputs_dir: Union[str, Path] = "outputs") -> Optional['RunPaths']:
+        
         latest_run_dir = find_latest_run_dir(base_outputs_dir) 
         if latest_run_dir is None:
             return None 
