@@ -147,7 +147,7 @@ def main():
             print(f"Coun't find checkpoint. Please specify one")            
     
     if not checkpoint_path or not checkpoint_path.exists():
-        print("Checkpoint path `{checkpoint_path}` doesn't exist.")
+        print(f"Checkpoint path {checkpoint_path} doesn't exist.")
         return 
     if not config_file_path or not config_file_path.exists():
         print(f"Config file path `{config_file_path}` doesn't exist.")
