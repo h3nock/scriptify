@@ -3,6 +3,7 @@
 .venv/
 ml/data/
 ml/outputs/
+ml/packaged_models/
 
 # Byte-compiled / optimized files
 __pycache__/
