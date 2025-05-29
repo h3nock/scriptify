@@ -8,8 +8,8 @@ from pydantic import BaseModel, Field, ValidationInfo, field_validator
 
 load_dotenv()
 
+# points to ml directory  
 PROJECT_ROOT  =  Path(__file__).resolve().parent.parent 
-
 class Paths(BaseModel):
     raw_data_root: Path
     raw_ascii_subdir_name: str = "ascii"
