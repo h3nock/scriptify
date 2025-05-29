@@ -108,7 +108,7 @@ def main():
         "--pkg_name", 
         type=str, 
         default="handwriting_model", 
-        help="Base name for the pakcaged model files" 
+        help="Base name for the packaged model files" 
     )
     
     parser.add_argument(
