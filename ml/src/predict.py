@@ -4,7 +4,7 @@ import torch
 import argparse
 import numpy as np
 from pathlib import Path
-from ml.src.utils.text_utils import construct_alphabet_list, encode_text, get_alphabet_map
+from src.utils.text_utils import construct_alphabet_list, encode_text, get_alphabet_map
 from src.models.rnn import HandwritingRNN
 from src.utils.paths import RunPaths, find_latest_run_checkpoint
 from src.utils.stroke_viz import plot_offset_strokes 
@@ -62,7 +62,7 @@ def predict_handwriting(model, text_to_generate, char_map: Dict[str, int], devic
                                    max_length=max_text_length,
                                    )
     actual_text_length = len(encoded_np_array) 
-    c = torch.tensor([encoded_np_array], dtype=torch.long, device=device) 
+    c = torch.tensor(np.array([encoded_np_array]), dtype=torch.long, device=device) 
     c_len = torch.tensor([actual_text_length], dtype=torch.long, device=device)
     
     with torch.no_grad():
