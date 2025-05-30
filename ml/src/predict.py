@@ -1,11 +1,11 @@
 import os
-from typing import Union
+from typing import Dict, Union
 import torch
 import argparse
 import numpy as np
 from pathlib import Path
+from ml.src.utils.text_utils import construct_alphabet_list, encode_text, get_alphabet_map
 from src.models.rnn import HandwritingRNN
-from src.data.dataloader import ProcessedHandwritingDataset
 from src.utils.paths import RunPaths, find_latest_run_checkpoint
 from src.utils.stroke_viz import plot_offset_strokes 
 from config.config import load_config 
@@ -20,11 +20,15 @@ def load_model_for_prediction(checkpoint_path: Union[str, Path],config, device):
     checkpoint = torch.load(checkpoint_path, map_location=device)
     
     model_params  = config.model_params 
+    alphabet = construct_alphabet_list(config.dataset.alphabet_string) 
+    alphabet_size = len(alphabet) 
+    char_map = get_alphabet_map(alphabet_list=alphabet)
+    
     model = HandwritingRNN(
         lstm_size=model_params.lstm_size,
         output_mixture_components=model_params.output_mixture_components, 
         attention_mixture_components=model_params.attention_mixture_components,
-        alphabet_size=ProcessedHandwritingDataset.get_alphabet_size()
+        alphabet_size=alphabet_size
     )
     
     state_dict = checkpoint['model_state_dict']
@@ -39,23 +43,30 @@ def load_model_for_prediction(checkpoint_path: Union[str, Path],config, device):
     model.to(device)
     model.eval()
     print(f"Model loaded from {checkpoint_path}")
-    return model
+    return model, char_map  
 
-def encode_text(text, alphabet, device):
-    """Encodes text into a tensor of character indices."""
-    char_to_idx = {c: i for i, c in enumerate(alphabet)}
-    idxs = [char_to_idx.get(c, 0) for c in text] + [0]      
-    c   = torch.tensor([idxs], dtype=torch.long, device=device)  
-    c_len  = torch.tensor([len(idxs)], dtype=torch.long, device=device)
-    return c, c_len 
+# def encode_text(text, alphabet, device):
+#     """Encodes text into a tensor of character indices."""
+#     char_to_idx = {c: i for i, c in enumerate(alphabet)}
+#     idxs = [char_to_idx.get(c, 0) for c in text] + [0]      
+#     c   = torch.tensor([idxs], dtype=torch.long, device=device)  
+#     c_len  = torch.tensor([len(idxs)], dtype=torch.long, device=device)
+#     return c, c_len 
 
-def predict_handwriting(model, text_to_generate, alphabet, device, max_length=1200, bias=0.75):
+def predict_handwriting(model, text_to_generate, char_map: Dict[str, int], device, max_text_length: int, max_stroke_length=1200, bias=0.75):
     """Generates handwriting for the given text."""
     model.eval()
-    c, c_len = encode_text(text_to_generate, alphabet, device)
+    
+    encoded_np_array = encode_text(text=text_to_generate,
+                                   char_to_index_map=char_map, 
+                                   max_length=max_text_length,
+                                   )
+    actual_text_length = len(encoded_np_array) 
+    c = torch.tensor([encoded_np_array], dtype=torch.long, device=device) 
+    c_len = torch.tensor([actual_text_length], dtype=torch.long, device=device)
     
     with torch.no_grad():
-        strokes = model.sample(c, c_len, max_length=max_length, bias=bias)
+        strokes = model.sample(c, c_len, max_length=max_stroke_length, bias=bias)
     if strokes:
         return strokes[0].cpu().numpy()  
     print("Warrning: model.sample returned no strokes") 
@@ -73,7 +84,7 @@ def main():
     parser.add_argument("--text", type=str, required=True, help="Text to generate handwriting for.")
     parser.add_argument("--max_length", type=int, default=1200, help="Maximum length of the generated stroke sequence.")
     parser.add_argument("--bias", type=float, default=1, help="Sampling bias (temperature). Lower values make it more deterministic.")
-    parser.add_argument("--output_file", type=str, default=None, help="Optional path to save the generated strokes as a .npy file.")
+    parser.add_argument("--output_file", type=str, default=None, help="Optional path to save the generated strokes as cha .npy file.")
     parser.add_argument("--no_cuda", action="store_true", help="Disable CUDA even if available.")
     
     args = parser.parse_args()
@@ -84,8 +95,6 @@ def main():
     else:
         device = torch.device("cpu")
         print("Using CPU for prediction.")
-
-    alphabet = ProcessedHandwritingDataset.get_alphabet()
 
     try:
         checkpoint_path = None
@@ -117,13 +126,15 @@ def main():
                 run_paths = RunPaths(run_name=f"predict_{checkpoint_path.stem}", base_outputs_dir=run_config.paths.outputs_dir)
                 run_paths.create_directories()
             
-            model = load_model_for_prediction(checkpoint_path,run_config, device)
+            max_text_len_for_encoding = run_config.dataset.max_text_len 
+            model, char_map = load_model_for_prediction(checkpoint_path,run_config, device)
             generated_strokes = predict_handwriting(
                 model, 
                 args.text, 
-                alphabet, 
+                char_map, 
                 device, 
-                max_length=args.max_length, 
+                max_text_length=max_text_len_for_encoding,
+                max_stroke_length=args.max_length, 
                 bias=args.bias
             )
             
