@@ -3,7 +3,7 @@ from pathlib import Path
 from src.data.loader import get_writerID, get_text_line_by_line, get_stroke_seqs, list_files 
 from src.data.preprocessing import normalize, stroke_coords_to_offsets
 from config.config import Paths as PathsConfig, Dataset as DatasetParams
-from src.utils.text_utils import encode_text, get_alphabet_map
+from src.utils.text_utils import encode_text, get_alphabet_map, construct_alphabet_list
 class OnlineHandwritingDataset:
     """
     Dataset class for online handwriting. 
@@ -27,7 +27,7 @@ class OnlineHandwritingDataset:
 
         if not dataset_params.alphabet_string:
             raise ValueError("alphabet_string not provided in dataset_params")
-        self.ALPHABET = ['\x00'] + list(dataset_params.alphabet_string) 
+        self.ALPHABET = construct_alphabet_list(dataset_params.alphabet_string) 
         self.samples_loaded = False
         self.char_to_index = get_alphabet_map(self.ALPHABET)
         self.ALPHABET_SIZE = len(self.ALPHABET)
@@ -114,12 +114,11 @@ class OnlineHandwritingDataset:
         char_lengths = np.zeros([num_samples], dtype=np.int16)
 
         for i, text in enumerate(texts_per_line):
-            encoded_text = encode_text(text=text, 
+            encoded_text, true_length = encode_text(text=text, 
                                        max_length=self.MAX_TEXT_LENGTH,
                                        char_to_index_map=self.char_to_index)
-            length = len(encoded_text) 
-            char_sequences[i, :length] = encoded_text
-            char_lengths[i] = length
+            char_sequences[i, :] = encoded_text
+            char_lengths[i] = true_length
 
         processed_data = {
             'strokes': strokes_padded,
