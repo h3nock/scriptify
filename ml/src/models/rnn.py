@@ -177,7 +177,8 @@ class HandwritingRNN(nn.Module):
              bias_tensor = bias.to(device)
         else:
              bias_tensor = torch.tensor([0.5] * batch_size, device=device, dtype=torch.float32)
-
+        
+        last_actual_char_idx = max(0, char_seq_lengths - 1) 
         for t in range(max_length):  
             # LSTM 1  
             lstm1_input = torch.cat([window, x], dim=1)  
@@ -208,19 +209,19 @@ class HandwritingRNN(nn.Module):
             x = stroke  
             
             # early stopping criteria 
-            pen_up   = (stroke[:, 2] > 0.7).all()
+            pen_up   = (stroke[:, 2] > 0.5).all()
             tiny_mv  = (stroke[:, :2].abs().max() < 0.02).all()
             if pen_up and tiny_mv:
                 pen_up_ctr += 1
             else:
                 pen_up_ctr = 0
 
-            if (phi[:, -1] > 0.98).all():
+            if (phi[:, last_actual_char_idx] > 0.98).all():
                 done_ctr += 1
             else:
                 done_ctr = 0
 
-            if pen_up_ctr >= 10 or done_ctr >= 8:
+            if pen_up_ctr >= 12 or done_ctr >= 15:
                 break
 
         strokes = torch.stack(strokes, dim=1)          
