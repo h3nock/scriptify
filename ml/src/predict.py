@@ -57,11 +57,10 @@ def predict_handwriting(model, text_to_generate, char_map: Dict[str, int], devic
     """Generates handwriting for the given text."""
     model.eval()
     
-    encoded_np_array = encode_text(text=text_to_generate,
+    encoded_np_array, actual_text_length = encode_text(text=text_to_generate,
                                    char_to_index_map=char_map, 
                                    max_length=max_text_length,
                                    )
-    actual_text_length = len(encoded_np_array) 
     c = torch.tensor(np.array([encoded_np_array]), dtype=torch.long, device=device) 
     c_len = torch.tensor([actual_text_length], dtype=torch.long, device=device)
     

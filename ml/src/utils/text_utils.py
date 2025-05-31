@@ -16,15 +16,20 @@ def get_alphabet_map(alphabet_list: list[str]) -> Dict[str, int]:
 
 def encode_text(text: str, char_to_index_map: Dict[str, int], 
                 max_length: int, add_eos: bool = True, eos_char_index: int = 0
-                ) -> np.ndarray:
-    """Enocde a text string into a sequence of integer indices"""
+                ) -> tuple[np.ndarray, int]:
+    """Encode a text string into a sequence of integer indices"""
     encoded = [char_to_index_map.get(c, eos_char_index) for c in text] 
     if add_eos:
         encoded.append(eos_char_index) 
-    if len(encoded) < max_length: 
+
+    true_length = len(encoded)
+
+    if true_length <= max_length: 
         padded_encoded = np.full(max_length, eos_char_index, dtype=np.int64) 
-        padded_encoded[:len(encoded)] = encoded 
+        padded_encoded[:true_length] = encoded 
     else:
         padded_encoded = np.array(encoded[:max_length], dtype=np.int64) 
+        true_length = max_length 
     
-    return padded_encoded
+    return padded_encoded, true_length
+
