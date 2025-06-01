@@ -60,6 +60,7 @@ class Dataset(BaseModel):
     max_stroke_len: int = Field(1200, gt=0)
     max_text_len: int = Field(80, gt=0)
     offset_filter_threshold: int = Field(60, gt=0)
+    alphabet_string: str
 
 class ModelParams(BaseModel): 
     lstm_size: int = Field(400, ge=0)

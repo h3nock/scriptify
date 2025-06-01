@@ -56,7 +56,6 @@ def package_model(checkpoint_path: Path,
     pkg_data = {
         'model_params': model_params.model_dump(), 
         'model_state_dict': model.state_dict(), 
-        'alphabet_size': alphabet_size, 
         "config_full": run_config.model_dump()
     }
     

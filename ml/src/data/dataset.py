@@ -3,7 +3,7 @@ from pathlib import Path
 from src.data.loader import get_writerID, get_text_line_by_line, get_stroke_seqs, list_files 
 from src.data.preprocessing import normalize, stroke_coords_to_offsets
 from config.config import Paths as PathsConfig, Dataset as DatasetParams
-
+from src.utils.text_utils import encode_text, get_alphabet_map, construct_alphabet_list
 class OnlineHandwritingDataset:
     """
     Dataset class for online handwriting. 
@@ -24,25 +24,14 @@ class OnlineHandwritingDataset:
         self.extreme_threshold = dataset_params.offset_filter_threshold 
         self.MAX_STROKE_LENGTH = dataset_params.max_stroke_len
         self.MAX_TEXT_LENGTH = dataset_params.max_text_len
-        self.ALPHABET = ['\x00',' ', '!', '"', '#', "'", '(', ')', '+', ',', '-', '.', '/', '0', '1', '2', '3', '4', 
-                    '5', '6', '7', '8', '9', ':', ';', '?', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 
-                    'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', 'a', 'b', 
-                    'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 
-                    'v', 'w', 'x', 'y', 'z']
+
+        if not dataset_params.alphabet_string:
+            raise ValueError("alphabet_string not provided in dataset_params")
+        self.ALPHABET = construct_alphabet_list(dataset_params.alphabet_string) 
         self.samples_loaded = False
-        self.char_to_index = {char: idx for idx, char in enumerate(self.ALPHABET)}
+        self.char_to_index = get_alphabet_map(self.ALPHABET)
         self.ALPHABET_SIZE = len(self.ALPHABET)
     
-    def _encode_text(self, text):
-        """
-        Encodes a text string into a sequence of integer indices based on the dataset alphabet.
-        Characters not found in the alphabet default to index 0.
-        """
-        encoded = [self.char_to_index.get(c,0) for c in text]
-        encoded.append(0) # append 0 as null for eos marker 
-        encoded = np.array(encoded, dtype=np.int64) 
-        return encoded[:self.MAX_TEXT_LENGTH] 
-     
     def _load_samples(self):
         """
         Loads and processes all samples from the ASCII and stroke files.
@@ -125,10 +114,11 @@ class OnlineHandwritingDataset:
         char_lengths = np.zeros([num_samples], dtype=np.int16)
 
         for i, text in enumerate(texts_per_line):
-            encoded_text = self._encode_text(text)
-            length = len(encoded_text) 
-            char_sequences[i, :length] = encoded_text
-            char_lengths[i] = length
+            encoded_text, true_length = encode_text(text=text, 
+                                       max_length=self.MAX_TEXT_LENGTH,
+                                       char_to_index_map=self.char_to_index)
+            char_sequences[i, :] = encoded_text
+            char_lengths[i] = true_length
 
         processed_data = {
             'strokes': strokes_padded,

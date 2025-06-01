@@ -11,7 +11,7 @@ dataset:
   max_stroke_len: 1200 
   max_text_len: 80 
   offset_filter_threshold: 60
-
+  alphabet_string: ' !"#''()+,-./0123456789:;?ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'
 model_params:
   lstm_size: 400 
   output_mixture_components: 20 
