@@ -1,3 +1,4 @@
+from typing import Optional
 import torch  
 import numpy as np
 import torch.nn as nn  
@@ -42,7 +43,17 @@ class HandwritingRNN(nn.Module):
     def one_hot_encode(self, char_seq):
         return F.one_hot(char_seq, num_classes=self.alphabet_size,).float() 
           
-    def forward(self, inputs, char_seq, char_seq_lengths, hidden_state=None, bias=None):  
+    def forward(self, inputs: torch.Tensor, char_seq: torch.Tensor,
+                char_seq_lengths: torch.Tensor,
+                hidden_state: Optional[
+                    tuple[ torch.Tensor, torch.Tensor, torch.Tensor,
+                          torch.Tensor, torch.Tensor, torch.Tensor,
+                          torch.Tensor, torch.Tensor]] = None, 
+                bias: Optional[torch.Tensor] = None):  
+        
+        if bias is None:
+            bias = torch.tensor([0.5] * inputs.size(0), device=inputs.device, dtype=inputs.dtype)
+
         assert inputs.dim() == 3 and inputs.size(2) == 3 
         assert char_seq.dim() == 2 
         assert char_seq_lengths.dim() == 1 
@@ -69,9 +80,14 @@ class HandwritingRNN(nn.Module):
         B, T_c, C1 = char_one_hot.shape 
         assert C1 == self.alphabet_size 
 
+        pis_list: list[torch.Tensor] = []
+        sigmas_list: list[torch.Tensor] = []
+        rhos_list: list[torch.Tensor] = []
+        mus_list: list[torch.Tensor] = []
+        es_list: list[torch.Tensor] = []
+
           
         # process sequence  
-        outputs = []  
         for t in range(seq_length):  
             x_t = inputs[:, t, :]  
               
@@ -109,17 +125,28 @@ class HandwritingRNN(nn.Module):
                 
             # GMM output 
             gmm_input = torch.cat([h1_d,h2_d,h3_d], dim=1) 
-            gmm_params = self.gmm(gmm_input, bias)  
-            outputs.append(gmm_params)  
-          
-        stacked_outputs = [torch.stack([out[i] for out in outputs], dim=1) for i in range(5)]  
+            pis, sigmas, rhos, mus, es = self.gmm(gmm_input, bias)  
+            pis_list.append(pis)
+            sigmas_list.append(sigmas) 
+            rhos_list.append(rhos) 
+            mus_list.append(mus) 
+            es_list.append(es)
+        pis_out = torch.stack(pis_list, dim=1)
+        sigmas_out = torch.stack(sigmas_list, dim=1)
+        rhos_out = torch.stack(rhos_list, dim=1)
+        mus_out = torch.stack(mus_list, dim=1)
+        es_out = torch.stack(es_list, dim=1)
           
         # hidden state for next sequence  
         hidden_state = (h1, c1, h2, c2, h3, c3, window, kappa)  
           
-        return stacked_outputs, hidden_state  
-      
-    def sample(self, char_seq, char_seq_lengths, max_length=1000, bias=0.5, prime=None):  
+        return pis_out, sigmas_out, rhos_out, mus_out, es_out, hidden_state
+    
+    @torch.jit.export  
+    def sample(self, char_seq: torch.Tensor, char_seq_lengths: torch.Tensor,
+               max_length: int = 1000, bias: float = 0.5,
+               prime: Optional[torch.Tensor] = None) -> list[torch.Tensor]:  
+
         batch_size = char_seq.size(0)  
         device = char_seq.device  
         
@@ -178,7 +205,7 @@ class HandwritingRNN(nn.Module):
         else:
              bias_tensor = torch.tensor([0.5] * batch_size, device=device, dtype=torch.float32)
         
-        last_actual_char_idx = max(0, char_seq_lengths - 1) 
+        last_actual_char_idx = max(0, char_seq_lengths.item() - 1) 
         for t in range(max_length):  
             # LSTM 1  
             lstm1_input = torch.cat([window, x], dim=1)  

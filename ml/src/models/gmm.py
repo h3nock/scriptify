@@ -1,3 +1,4 @@
+from typing import Optional
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -6,7 +7,7 @@ class GMMLayer(nn.Module):
     """
     GMM layer. 
     """
-    def __init__(self,input_size, num_mixtures,bias =0.75, eps=1e-8, sigma_eps=1e-4):
+    def __init__(self,input_size: int, num_mixtures: int,bias: float = 1, eps: float = 1e-8, sigma_eps: float = 1e-4):
         super(GMMLayer, self).__init__()
         self.input_size = input_size 
         self.num_mixtures = num_mixtures
@@ -15,7 +16,10 @@ class GMMLayer(nn.Module):
         self.eps = eps 
         self.sigma_eps = sigma_eps 
 
-    def forward(self, x, bias= None):
+    def forward(self, x: torch.Tensor,
+                bias: torch.Tensor) ->  tuple [
+                    torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor,
+                    torch.Tensor]:
         """
         """
         z = self.output_layer(x)  
@@ -28,18 +32,17 @@ class GMMLayer(nn.Module):
             1
         ], dim = 1)         
 
-        if bias is not None:  
-            if not isinstance(bias, torch.Tensor):  
-                bias_tensor = torch.tensor(bias, device=x.device, dtype=x.dtype)  
-            else:  
-                bias_tensor = bias  
-            
-            if bias_tensor.numel() == 1: # scalar bias
-                pis_logits = pis_logits * (1 + bias_tensor)
-                sigmas_logits = sigmas_logits - bias_tensor
-            else: # per-batch item bias
-                pis_logits = pis_logits * (1 + bias_tensor.unsqueeze(-1))  
-                sigmas_logits = sigmas_logits - bias_tensor.unsqueeze(-1) 
+        if not isinstance(bias, torch.Tensor):  
+            bias_tensor = torch.tensor(bias, device=x.device, dtype=x.dtype)  
+        else:  
+            bias_tensor = bias  
+        
+        if bias_tensor.numel() == 1: # scalar bias
+            pis_logits = pis_logits * (1 + bias_tensor)
+            sigmas_logits = sigmas_logits - bias_tensor
+        else: # per-batch item bias
+            pis_logits = pis_logits * (1 + bias_tensor.unsqueeze(-1))  
+            sigmas_logits = sigmas_logits - bias_tensor.unsqueeze(-1) 
 
 
         pis = F.softmax(pis_logits, dim=-1)
@@ -49,7 +52,8 @@ class GMMLayer(nn.Module):
  
         return pis, sigmas, rhos, mus, es 
     
-    def sample(self, pis, sigmas, rhos, mus, es):
+    def sample(self, pis: torch.Tensor, sigmas: torch.Tensor,
+               rhos: torch.Tensor, mus: torch.Tensor, es: torch.Tensor):
 
         batch_size = pis.size(0) 
 
