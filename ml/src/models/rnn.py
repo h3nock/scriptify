@@ -251,6 +251,4 @@ class HandwritingRNN(nn.Module):
             if pen_up_ctr >= 12 or done_ctr >= 15:
                 break
 
-        strokes = torch.stack(strokes, dim=1)          
-        return [seq for seq in strokes]
-        
+        return strokes        
