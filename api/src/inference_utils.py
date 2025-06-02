@@ -31,5 +31,5 @@ def encode_text(text: str, char_to_index_map: Dict[str, int],
         padded_encoded = np.array(encoded[:max_length], dtype=np.int64) 
         true_length = max_length 
     
-    return padded_encoded, true_length
+    return np.array([padded_encoded]), true_length
 
