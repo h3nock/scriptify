@@ -205,7 +205,7 @@ class HandwritingRNN(nn.Module):
         else:
              bias_tensor = torch.tensor([0.5] * batch_size, device=device, dtype=torch.float32)
         
-        last_actual_char_idx = max(0, char_seq_lengths.item() - 1) 
+        last_actual_char_idx = max(0, int(char_seq_lengths.item()) - 1) 
         for t in range(max_length):  
             # LSTM 1  
             lstm1_input = torch.cat([window, x], dim=1)  
