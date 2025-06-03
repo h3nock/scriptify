@@ -67,7 +67,9 @@ def predict_handwriting(model, text_to_generate, char_map: Dict[str, int], devic
     with torch.no_grad():
         strokes = model.sample(c, c_len, max_length=max_stroke_length, bias=bias)
     if strokes:
-        return strokes[0].cpu().numpy()  
+        # just take the first sample (since we aren't doing batch prediction)
+        strokes = [stroke.squeeze(0).cpu().numpy() for stroke in strokes]
+        return np.array(strokes)
     print("Warrning: model.sample returned no strokes") 
     return np.array([]) 
 
