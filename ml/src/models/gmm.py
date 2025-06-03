@@ -71,26 +71,26 @@ class GMMLayer(nn.Module):
 
         rho_selected = torch.gather(rhos, 1, idx_expanded).squeeze(1) 
 
-        # sample from bivariate normal 
-        mean = torch.stack([mu_x_selected, mu_y_selected], dim=1) 
+        # sample from bivariate normal samples 
+        z0 = torch.randn_like(mu_x_selected)
+        z1 = torch.randn_like(mu_y_selected)
 
-        # create covariance matrices 
-        cov = torch.zeros(batch_size, 2, 2, device=pis.device)  
-
-        jitter = 1e-6 
-
-        cov[:, 0, 0] = sigma_x_selected.pow(2)  + jitter 
-        cov[:, 1, 1] = sigma_y_selected.pow(2) + jitter  
-        cov[:, 0, 1] = rho_selected * sigma_x_selected * sigma_y_selected  
-        cov[:, 1, 0] = cov[:, 0, 1]  
-          
-        # sample from multivariate normal  
-        m = torch.distributions.MultivariateNormal(mean, cov)  
-        xy = m.sample()  
+        # transform to correlated bivariate normal
+        # x = mu_x + sigma_x * z0
+        x_sample = mu_x_selected + sigma_x_selected * z0
+        
+        # y = mu_y + sigma_y * (rho * z0 + sqrt(1 - rho^2) * z1)
+        sqrt_term = torch.sqrt(torch.clamp(1.0 - rho_selected.pow(2), min=self.eps))
+        y_sample = mu_y_selected + sigma_y_selected * (rho_selected * z0 + sqrt_term * z1)
+        
+        # combine x and y samples
+        xy = torch.stack([x_sample, y_sample], dim=1)   
           
         # sample end-of-stroke  
-        e = torch.bernoulli(es)  
-          
+        # es should be (batch_size, 1)
+        e_probs = es.squeeze(-1) if es.dim() > 1 else es
+        e = torch.bernoulli(e_probs).unsqueeze(-1) 
+
         # combine into stroke  
         stroke = torch.cat([xy, e], dim=1)  
         return stroke
