@@ -14,7 +14,10 @@ class AttentionMechanism(nn.Module):
         # attention parameters layer  
         self.attention_params = nn.Linear(attention_input_dim, attention_output_dim)  
           
-    def forward(self, hidden_state, prev_window, prev_kappa, inputs, char_seq, char_seq_lengths):  
+    def forward(self, hidden_state: torch.Tensor, prev_window: torch.Tensor,
+                prev_kappa: torch.Tensor, inputs: torch.Tensor,
+                char_seq: torch.Tensor, char_seq_lengths: torch.Tensor) -> tuple[
+                    torch.Tensor, torch.Tensor, torch.Tensor]:  
         B = hidden_state.size(0) 
 
         attention_input = torch.cat([prev_window, inputs, hidden_state], dim=1)  

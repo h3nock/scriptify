@@ -65,24 +65,15 @@ def package_model(checkpoint_path: Path,
     
     max_char_len_for_tracing = run_config.dataset.max_text_len
 
-    example_batch_size = 1
-    example_x_seq_len = 1
-    
-    example_x = torch.zeros(example_batch_size, example_x_seq_len, 3, device=device)
-    example_x[:, 0, 2] = 1.0
-
-    example_c = torch.randint(0, alphabet_size, (example_batch_size, max_char_len_for_tracing), device=device, dtype=torch.long)
-    example_c_len = torch.tensor([max_char_len_for_tracing] * example_batch_size, device=device, dtype=torch.long)
-
-    print(f"Tracing model with example inputs: x_shape={example_x.shape}, c_shape={example_c.shape}, c_len_shape={example_c_len.shape}")
-
     try:
-        traced_model = torch.jit.trace(model, (example_x, example_c, example_c_len))
-        traced_model_path = output_dir / f"{output_base_name}.traced.pt"
+        model.to(device)
+        model.eval()
+        traced_model = torch.jit.script(model) 
+        traced_model_path = output_dir / f"{output_base_name}.scripted.pt"
         torch.jit.save(traced_model, traced_model_path)
-        print(f"TorchScript traced model saved to: {traced_model_path}")
+        print(f"TorchScript scripted model saved to: {traced_model_path}")
     except Exception as e:
-        print(f"Error during TorchScript tracing or saving: {e}")
+        print(f"Error during TorchScript scripting or saving: {e}")
         traceback.print_exc()
         print("TorchScript model was NOT saved due to an error.")
     
