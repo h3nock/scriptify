@@ -7,21 +7,30 @@ from pathlib import Path
 import logging 
 import time 
 from contextlib import asynccontextmanager
-from inference_utils import construct_alphabet_list, encode_text, get_alphabet_map
+from inference_utils import construct_alphabet_list, convert_offsets_to_absolute_coords, encode_text, get_alphabet_map
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__) 
 
 MODEL_DIR = Path("../../ml/packaged_models") 
-TRACED_MODEL_NAME = "handwriting_model.traced.pt" 
+SCRIPTED_MODEL_NAME = "handwriting_model.scripted.pt" 
 METADATA_MODEL_NAME = "handwriting_model.pt" 
 
-traced_model: Optional[torch.jit.ScriptModule] = None 
+scripted_model: Optional[torch.jit.ScriptModule] = None 
 model_metadata: Optional[dict] = None 
 device: Optional[torch.device] = None 
 alphabet_map: Optional[dict[str, int]] = None 
 ALPHABET_LIST: Optional[list[str]] = None 
+ALPHABET_SIZE: Optional[int] = None 
 max_text_len: Optional[int] = None 
+output_mixture_components: Optional[int] = None # To store num_mixtures for GMM sampling
+lstm_size: Optional[int] = None 
+attention_mixture_components: Optional[int] = None 
+
+# Patience for early stopping in generate_strokes
+PATIENCE_PEN_UP_EOS = 15
+MIN_MOVEMENT_THRESHOLD = 0.02 
+
 
 class HandwritingRequest(BaseModel):
     text: str = Field(..., min_length=1, max_length=40, description="Text to generate handwriting for")
@@ -49,27 +58,27 @@ class HealthResponse(BaseModel):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifespan context manager for startup and shutdown events"""
-    global traced_model, model_metadata, device, alphabet_map, max_text_len, ALPHABET_LIST
+    global scripted_model, model_metadata, device, alphabet_map, max_text_len, ALPHABET_LIST, output_mixture_components, lstm_size, attention_mixture_components, ALPHABET_SIZE
     logger.info("Attempting to load model resources during startup") 
     try:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         logger.info(f"Using device: {device}")
         
-        traced_model_path = MODEL_DIR / TRACED_MODEL_NAME
+        scripted_model_path = MODEL_DIR / SCRIPTED_MODEL_NAME
         metadata_model_path = MODEL_DIR / METADATA_MODEL_NAME
         
-        if  not traced_model_path.exists():
-            logger.error(f"Traced model not found at {traced_model_path}")
-            raise FileNotFoundError(f"Traced model not found at {traced_model_path}")
+        if  not scripted_model_path.exists():
+            logger.error(f"Traced model not found at {scripted_model_path}")
+            raise FileNotFoundError(f"Traced model not found at {scripted_model_path}")
         if not metadata_model_path or not metadata_model_path.exists():
             logger.error(f"Metadata model file not found at {metadata_model_path}")
             raise FileNotFoundError(f"Metadata model file not found at {metadata_model_path}")
 
         # Load the traced model
-        traced_model = torch.jit.load(traced_model_path, map_location=device)
-        if traced_model:
-            traced_model.eval()
-            logger.info(f"Traced model loaded successfully from {traced_model_path}")
+        scripted_model = torch.jit.load(scripted_model_path, map_location=device)
+        if scripted_model:
+            scripted_model.eval()
+            logger.info(f"Traced model loaded successfully from {scripted_model_path}")
 
         # Load the metadata
         model_metadata = torch.load(metadata_model_path, map_location='cpu')
@@ -82,13 +91,19 @@ async def lifespan(app: FastAPI):
                 raise ValueError(f"Key `config_full` not found or not a dict")
             
             dataset_config = config_full['dataset']
+            model_params = config_full['model_params']
 
             if not dataset_config or not isinstance(dataset_config, dict):
                 raise ValueError(f"Key `dataset` not found or not a dict in config_full")
             alphabet_str = dataset_config['alphabet_string']
             max_text_len = dataset_config['max_text_len']
+            output_mixture_components = model_params['output_mixture_components']
+
+            lstm_size = model_params['lstm_size']
+            attention_mixture_components = model_params['attention_mixture_components']
 
             ALPHABET_LIST = construct_alphabet_list(alphabet_str)
+            ALPHABET_SIZE = len(ALPHABET_LIST)
             alphabet_map = get_alphabet_map(ALPHABET_LIST) 
             
             logger.info(f"Alphabet created. Size: {len(ALPHABET_LIST)}")
@@ -98,14 +113,15 @@ async def lifespan(app: FastAPI):
 
     except Exception as e:
         logger.error(f"Error loading model resources: {e}", exc_info=True)
-        traced_model = None
+        scripted_model = None
         model_metadata = None
+        raise
     
     yield
     
     # Cleanup on shutdown
     logger.info("Shutting down API and cleaning up resources")
-    traced_model = None 
+    scripted_model = None 
     model_metadata = None 
 
 app = FastAPI(
@@ -121,13 +137,13 @@ async def read_root():
 
 @app.get("/health", response_model=HealthResponse, tags=["General"])
 async def health_check():
-    global traced_model, model_metadata, device, alphabet_map, max_text_len, ALPHABET_LIST 
+    global scripted_model, model_metadata, device, alphabet_map, max_text_len, ALPHABET_LIST 
     
-    is_healthy = all([traced_model, model_metadata, device, alphabet_map, max_text_len, ALPHABET_LIST])
+    is_healthy = all([scripted_model, model_metadata, device, alphabet_map, max_text_len, ALPHABET_LIST])
     
     return HealthResponse(
         status="healthy" if is_healthy else "unhealthy",
-        model_loaded=bool(traced_model),
+        model_loaded=bool(scripted_model),
         device=str(device) if device else "unknown",
         model_metadata_keys=list(model_metadata.keys()) if model_metadata else None,
     )
@@ -145,10 +161,98 @@ def text_to_tensor(text: str, device: torch.device) -> tuple[torch.Tensor, torch
         max_length=max_text_len 
     )
 
-    char_seq = torch.tensor([padded_encoded_np],dtype=torch.long, device=device)
-    char_len = torch.tensor([true_length],dtype=torch.long, device=device)
+    char_seq = torch.from_numpy(padded_encoded_np).to(device=device, dtype=torch.long)
+    char_len = torch.tensor([true_length], device=device, dtype=torch.long)
 
     return char_seq, char_len
+
+def generate_strokes(
+    char_seq: torch.Tensor,
+    char_lengths: torch.Tensor,
+    max_gen_len: int,
+    api_bias: float,
+    current_device: torch.device
+) -> list[list[float]]:
+    """Generate strokes using the model's built-in sample method"""
+    global scripted_model
+    if scripted_model is None:
+        raise ValueError("Scripted model not initialized.")
+    
+    with torch.no_grad():
+        try:
+            stroke_tensors = scripted_model.sample(
+                char_seq, 
+                char_lengths, 
+                max_length=max_gen_len, 
+                bias=api_bias
+            )
+            
+            if len(stroke_tensors) == 1 and stroke_tensors[0].dim() == 2:
+                all_strokes_tensor = stroke_tensors[0]
+                stroke_offsets = all_strokes_tensor.cpu().numpy().tolist()
+            else:
+                stroke_offsets = []
+                for stroke_tensor in stroke_tensors:
+                    if stroke_tensor.dim() == 2:
+                        stroke_data = stroke_tensor.squeeze(0).cpu().numpy().tolist()
+                    else:
+                        stroke_data = stroke_tensor.cpu().numpy().tolist()
+                    
+                    if len(stroke_data) == 3:
+                        stroke_offsets.append(stroke_data)
+            
+            return stroke_offsets
+            
+        except Exception as e:
+            logger.error(f"Error in model sampling: {e}", exc_info=True)
+            return []
+            
+@app.post("/generate", response_model=HandwritingResponse, tags=["Generation"])
+async def generate_handwriting_endpoint(request: HandwritingRequest):
+    if not all([scripted_model, model_metadata, device, alphabet_map, max_text_len]):
+        logger.error("API not fully initialized. Check /health endpoint.")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Model or required resources not loaded."
+        )
+    
+    assert device is not None, "Device is None inside generate_handwriting"
+    start_time = time.time()
+    
+    try:
+        char_seq_tensor, char_lengths_tensor = text_to_tensor(request.text, device)
+
+        relative_stroke_offsets = generate_strokes(
+            char_seq_tensor, char_lengths_tensor, request.max_length, request.bias, device
+        )
+
+        if not relative_stroke_offsets:
+            return HandwritingResponse(
+                input_text=request.text,
+                generated_strokes=[],
+                num_points=0,
+                generation_time_ms=(time.time() - start_time) * 1000,
+                message="No strokes generated."
+            )
+
+        absolute_stroke_coords = convert_offsets_to_absolute_coords(relative_stroke_offsets)
+        stroke_points_response = [
+            StrokePoint(x=s[0], y=s[1], pen_state=s[2]) for s in absolute_stroke_coords
+        ]
+        generation_time_ms = (time.time() - start_time) * 1000
+
+        return HandwritingResponse(
+            input_text=request.text,
+            generated_strokes=stroke_points_response,
+            num_points=len(stroke_points_response),
+            generation_time_ms=generation_time_ms
+        )
+    except ValueError as ve:
+        logger.error(f"ValueError during generation for '{request.text}': {ve}", exc_info=True)
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(ve))
+    except Exception as e:
+        logger.error(f"Unexpected error for '{request.text}': {e}", exc_info=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="An unexpected error occurred.")
 
 if __name__ == "__main__":
     import uvicorn
