@@ -44,10 +44,10 @@ class StrokePoint(BaseModel):
     
 class HandwritingResponse(BaseModel):
     input_text: str
-    generated_strokes: list[StrokePoint]
-    num_points: int
-    message: str = "Successfully generated handwriting."
     generation_time_ms: float
+    num_points: int
+    generated_strokes: list[StrokePoint]
+    message: str = "Successfully generated handwriting."
 
 class HealthResponse(BaseModel):
     status: str 
