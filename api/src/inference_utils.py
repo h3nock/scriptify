@@ -33,3 +33,16 @@ def encode_text(text: str, char_to_index_map: Dict[str, int],
     
     return np.array([padded_encoded]), true_length
 
+
+def convert_offsets_to_absolute_coords(stroke_offsets: list[list[float]]) -> list[list[float]]:
+    if not stroke_offsets:
+        return []
+    
+    # convert to numpy for vectorized operations
+    strokes_array = np.array(stroke_offsets)
+    
+    # vectorized cumulative sum for x and y 
+    strokes_array[:, 0] = np.cumsum(strokes_array[:, 0])  # cumulative dx
+    strokes_array[:, 1] = np.cumsum(strokes_array[:, 1])  # cumulative dy
+    
+    return strokes_array.tolist()
