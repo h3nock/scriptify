@@ -178,7 +178,7 @@ def generate_strokes(
     if scripted_model is None:
         raise ValueError("Scripted model not initialized.")
     
-    with torch.no_grad():
+    with torch.inference_mode():
         try:
             stroke_tensors = scripted_model.sample(
                 char_seq, 
