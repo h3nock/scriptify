@@ -1,5 +1,6 @@
 from typing import Optional
 from fastapi import FastAPI, HTTPException, status 
+from fastapi.middleware.cors import CORSMiddleware 
 from pydantic import BaseModel, Field
 import torch 
 import torch.nn.functional as F 
@@ -37,7 +38,7 @@ class HandwritingRequest(BaseModel):
     max_length: int = Field(default=700, ge=50, le=1500, description="Maximum number of stroke points")
     bias: float = Field(default=0.75, ge=0.1, le=2.0, description="Sampling bias for generation")
 class HandwritingResponse(BaseModel):
-    sucess: bool = True
+    success: bool = True
     input_text: str
     generation_time_ms: float
     num_points: int
@@ -124,6 +125,15 @@ app = FastAPI(
     description="API to generate handwriting from text using a PyTorch model.", 
     version="0.1.0",
     lifespan=lifespan
+)
+
+# add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173","http://127.0.0.1:5173"],
+    allow_credentials=True,
+    allow_methods=["GET", "POST"],
+    allow_headers=["*"],
 )
 
 @app.get("/", tags=["General"])
