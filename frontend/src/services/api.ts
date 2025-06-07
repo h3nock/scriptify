@@ -94,3 +94,18 @@ export const generateHandwriting = async (
     throw new ApiError(getErrorMessage(error));
   }
 };
+
+export const checkAPIHealth = async (): Promise<boolean> => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/health`, {
+      method: 'GET',
+      headers: {
+        'accept': 'application/json',
+      },
+    });
+    return response.ok;
+  } catch (error) {
+    console.error('Health check failed:', error);
+    return false;
+  }
+};
