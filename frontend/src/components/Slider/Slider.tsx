@@ -31,12 +31,16 @@ const Slider: React.FC<SliderProps> = ({
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newValue = Number(e.target.value);
     if (inverted) {
+      // Invert the slider value by subtracting the new value from (min + max).
+      // This reverses the slider's direction when the `inverted` prop is true.
       onChange((min + max) - newValue);
     } else {
       onChange(newValue);
     }
   };
 
+  // Calculate the display value for the slider.
+  // If `inverted` is true, reverse the value by subtracting it from (min + max).
   const displayValue = inverted ? (min + max) - value : value;
 
   return (
