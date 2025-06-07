@@ -1,5 +1,6 @@
 from typing import Optional
 from fastapi import FastAPI, HTTPException, status 
+from fastapi.middleware.cors import CORSMiddleware 
 from pydantic import BaseModel, Field
 import torch 
 import torch.nn.functional as F 
@@ -36,17 +37,12 @@ class HandwritingRequest(BaseModel):
     text: str = Field(..., min_length=1, max_length=40, description="Text to generate handwriting for")
     max_length: int = Field(default=700, ge=50, le=1500, description="Maximum number of stroke points")
     bias: float = Field(default=0.75, ge=0.1, le=2.0, description="Sampling bias for generation")
-
-class StrokePoint(BaseModel):
-    x: float 
-    y: float 
-    pen_state: float # 0 for pen down, 1 for pen up 
-    
 class HandwritingResponse(BaseModel):
+    success: bool = True
     input_text: str
     generation_time_ms: float
     num_points: int
-    generated_strokes: list[StrokePoint]
+    strokes: list[list[float]]
     message: str = "Successfully generated handwriting."
 
 class HealthResponse(BaseModel):
@@ -129,6 +125,15 @@ app = FastAPI(
     description="API to generate handwriting from text using a PyTorch model.", 
     version="0.1.0",
     lifespan=lifespan
+)
+
+# add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173","http://127.0.0.1:5173"],
+    allow_credentials=True,
+    allow_methods=["GET", "POST"],
+    allow_headers=["*"],
 )
 
 @app.get("/", tags=["General"])
@@ -228,23 +233,21 @@ async def generate_handwriting_endpoint(request: HandwritingRequest):
 
         if not relative_stroke_offsets:
             return HandwritingResponse(
+                success=False,
                 input_text=request.text,
-                generated_strokes=[],
+                strokes=[],
                 num_points=0,
                 generation_time_ms=(time.time() - start_time) * 1000,
                 message="No strokes generated."
             )
 
         absolute_stroke_coords = convert_offsets_to_absolute_coords(relative_stroke_offsets)
-        stroke_points_response = [
-            StrokePoint(x=s[0], y=s[1], pen_state=s[2]) for s in absolute_stroke_coords
-        ]
         generation_time_ms = (time.time() - start_time) * 1000
 
         return HandwritingResponse(
             input_text=request.text,
-            generated_strokes=stroke_points_response,
-            num_points=len(stroke_points_response),
+            strokes=absolute_stroke_coords,
+            num_points=len(absolute_stroke_coords),
             generation_time_ms=generation_time_ms
         )
     except ValueError as ve:

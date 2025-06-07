@@ -1,0 +1,152 @@
+.setting-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-width: 200px;
+}
+
+.setting-group label {
+  font-weight: 500;
+  color: #495057;
+  font-size: 0.9rem;
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 0.25rem;
+}
+
+.setting-value {
+  font-weight: 400;
+  color: #007acc;
+  font-size: 0.85rem;
+}
+
+.slider-container {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.slider-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.75rem;
+  color: #6c757d;
+  margin-top: 0.5rem; 
+  padding: 0 10px;
+}
+
+.slider-labels span {
+  font-weight: 400;
+}
+
+.slider-ticks {
+  display: flex;
+  justify-content: space-between;
+  margin: 0.25rem 10px 0; 
+  height: 8px;
+  align-items: center;
+}
+
+.slider-tick {
+  width: 2px;
+  height: 8px;
+  background: #dee2e6;
+  border-radius: 1px;
+}
+
+.slider-tick.major {
+  height: 12px;
+  background: #adb5bd;
+}
+
+.slider {
+  width: 100%;
+  height: 6px;
+  border-radius: 3px;
+  background: #e9ecef;
+  outline: none;
+  -webkit-appearance: none;
+  appearance: none;
+  cursor: pointer;
+  margin: 0.5rem 0 0.25rem;
+  position: relative;
+}
+
+.slider::-webkit-slider-track {
+  width: 100%;
+  height: 6px;
+  border-radius: 3px;
+  background: #e9ecef;
+}
+
+.slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #007acc;
+  cursor: pointer;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  transition: all 0.2s ease;
+  margin-top: -7px; 
+}
+
+.slider::-webkit-slider-thumb:hover {
+  background: #0056b3;
+  transform: scale(1.1);
+  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.3);
+}
+
+.slider::-moz-range-track {
+  width: 100%;
+  height: 6px;
+  border-radius: 3px;
+  background: #e9ecef;
+  border: none;
+}
+
+.slider::-moz-range-thumb {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #007acc;
+  cursor: pointer;
+  border: none;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  transition: all 0.2s ease;
+}
+
+.slider::-moz-range-thumb:hover {
+  background: #0056b3;
+  transform: scale(1.1);
+  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.3);
+}
+
+/* Firefox specific fixes */
+.slider::-moz-focus-outer {
+  border: 0;
+}
+
+.slider::-moz-range-progress {
+  background: #007acc;
+  height: 6px;
+  border-radius: 3px 0 0 3px;
+}
+
+/* Responsive Design for Mobile */
+@media (max-width: 768px) {
+  .setting-group {
+    min-width: 280px;
+  }
+  
+  .slider-labels {
+    padding: 0 8px;
+    margin-top: 0.4rem; 
+  }
+  
+  .slider-ticks {
+    margin: 0.25rem 8px 0;
+  }
+}
