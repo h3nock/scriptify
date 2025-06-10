@@ -9,8 +9,8 @@ export interface HandwritingResponse {
   message?: string;
 }
 
-const API_BASE_URL = "http://127.0.0.1:8000";
-const DEFAULT_TIMEOUT = 10000;
+const API_BASE_URL = "https://bitwise42-scriptify-api.hf.space";
+const DEFAULT_TIMEOUT = 180000;
 
 class ApiError extends Error {
   status?: number;
@@ -62,6 +62,7 @@ export const generateHandwriting = async (
   const { fetch: fetchWithTimeout, cleanup } = createFetchWithTimeout();
 
   try {
+    const health_resp = await checkAPIHealth(); 
     const response = await fetchWithTimeout(`${API_BASE_URL}/generate`, {
       method: "POST",
       headers: {
@@ -103,6 +104,7 @@ export const checkAPIHealth = async (): Promise<boolean> => {
         'accept': 'application/json',
       },
     });
+    console.log(`${response.body}`)
     return response.ok;
   } catch (error) {
     console.error('Health check failed:', error);
