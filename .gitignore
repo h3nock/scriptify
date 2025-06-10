@@ -25,3 +25,6 @@ ml/wandb/
 
 #ignore plots 
 *.png
+
+#ignore huggingface space 
+/scriptify-hf-space 
