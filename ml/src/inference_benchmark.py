@@ -6,13 +6,16 @@ import pynvml
 import argparse  
 import logging 
 import threading
+import numpy as np 
 from pathlib import Path 
 from typing import Optional
+from src.utils.stroke_viz import plot_offset_strokes
 from src.utils.text_utils import construct_alphabet_list, encode_text, get_alphabet_map
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__) 
 
+QUANTIZED_MODEL_NAME = "model.scripted.quantized.pt"
 SCRIPTED_MODEL_NAME = "model.scripted.pt" 
 METADATA_MODEL_NAME = "model.pt" 
 
@@ -23,6 +26,8 @@ alphabet_map: Optional[dict[str, int]] = None
 ALPHABET_LIST: Optional[list[str]] = None 
 ALPHABET_SIZE: Optional[int] = None 
 max_text_len: Optional[int] = None 
+
+use_cuda: bool = False
 
 def text_to_tensor(text: str, device: torch.device) -> tuple[torch.Tensor, torch.Tensor]:
     """Convert text to tensor format expected by the model"""
@@ -43,13 +48,13 @@ def text_to_tensor(text: str, device: torch.device) -> tuple[torch.Tensor, torch
     return char_seq, char_len
 
 
-def init_model(model_dir: Path):
+def init_model(model_dir: Path, quantized: bool = False):
 
     global scripted_model, model_metadata, alphabet_map, max_text_len, ALPHABET_LIST, ALPHABET_SIZE
     logger.info("Attempting to load model resources during startup") 
     try:
         
-        scripted_model_path = model_dir / SCRIPTED_MODEL_NAME
+        scripted_model_path = model_dir / (SCRIPTED_MODEL_NAME if not quantized else QUANTIZED_MODEL_NAME)
         metadata_model_path = model_dir / METADATA_MODEL_NAME
         
         if  not scripted_model_path.exists():
@@ -122,7 +127,7 @@ def sample(  char_seq: torch.Tensor,
             return []
      
 def gpu_stats():
-    if not torch.cuda.is_available():
+    if not use_cuda:
         return 0.0, 0.0 
 
     h = pynvml.nvmlDeviceGetHandleByIndex(0)
@@ -146,7 +151,7 @@ def benchmark(text: str, run_name: str, runs: int, chars: torch.Tensor, chars_le
     gpu_mem_peaks = []
 
     for run in range(runs):
-        if torch.cuda.is_available():
+        if use_cuda:
             torch.cuda.reset_max_memory_allocated()
         peak = {"cpu": 0, "gpu": 0}
         stop_event = threading.Event()
@@ -166,7 +171,7 @@ def benchmark(text: str, run_name: str, runs: int, chars: torch.Tensor, chars_le
         latencies.append(curr_latency)
         cpu_peaks.append(peak['cpu'])
         gpu_peaks.append(peak['gpu'])
-        if torch.cuda.is_available():
+        if use_cuda:
             gpu_mem_peaks.append(torch.cuda.max_memory_allocated(device) / 1e6) # MB
         else:
             gpu_mem_peaks.append(0)
@@ -186,20 +191,22 @@ def benchmark(text: str, run_name: str, runs: int, chars: torch.Tensor, chars_le
     wandb.log(summary) 
 
 def main():
-    global device 
+    global device, use_cuda  
 
     parser = argparse.ArgumentParser(description="Benchmark inference")
-    parser.add_argument("--model_path", type=str, default=None, help="Path to the run directory contianing packaged model metadata (`model.pt`) and the scripted model (`model.scripted.pt`). By default, each run's packages are stored separetly inside packaged_models")
+    parser.add_argument("--model_path", type=str, default="./packaged_models/", help="Path to the run directory contianing packaged model metadata (`model.pt`) and the scripted model (`model.scripted.pt`). By default, each run's packages are stored separetly inside packaged_models")
     parser.add_argument("--text", type=str, default="Hello World", help="Text to generate to text the inference with.")
     parser.add_argument("--num_runs", type=int, default=100, help="The number of runs to per setting")
     parser.add_argument("--max_stroke_len", type=int, default=1200, help="Maximum length of the generated stroke sequence.")
     parser.add_argument("--bias", type=float, default=2, help="Sampling bias (temperature). Lower values make it more deterministic.")
     parser.add_argument("--no_cuda", action="store_true", help="Disable CUDA even if available.")
+    parser.add_argument("--quantized", action="store_true", help="weather to use quantized model or not")
     
     args = parser.parse_args()
+
     torch.manual_seed(seed=42)
     wandb.init(project="scriptify",reinit=True)
-    use_cuda: bool = not args.no_cuda and torch.cuda.is_available() 
+    use_cuda = not args.no_cuda and torch.cuda.is_available()  and not args.quantized 
 
     if use_cuda:
         device = torch.device("cuda")
@@ -210,25 +217,29 @@ def main():
         print("Using CPU for prediction.")
 
     model_path =  Path(args.model_path)
-    if model_path is None or not model_path.exists():
+    if not model_path.exists():
         raise ValueError("Valid model_path arguemnt is required")
     if not model_path.is_dir():
         raise ValueError("model_path should point to a directory contianing `model.pt` and `model.scripted.pt`")
         
 
-    init_model (model_dir=model_path)
+    init_model (model_dir=model_path, quantized=args.quantized)
 
     char_seq_tensor, char_lengths_tensor = text_to_tensor(args.text, device)
 
     # a warmp up turn 
-    sample(char_seq_tensor, char_lengths=char_lengths_tensor, max_gen_len=1200,bias=2)
+    generated_strokes = sample(char_seq_tensor, char_lengths=char_lengths_tensor, max_gen_len=1200,bias=2)
+    logger.info(f"generated_strokes: {generated_strokes[:10]}")
+    generated_strokes_np = np.array([stroke.squeeze(0).cpu().numpy() for stroke in generated_strokes])
+    plot_offset_strokes(generated_strokes_np,"./packaged_models/", plot_only_text=True)
     run_name = model_path.name  
     benchmark(args.text, run_name, args.num_runs,chars=char_seq_tensor, chars_len=char_lengths_tensor, 
               max_stroke_len=args.max_stroke_len, bias=args.bias)
 
     wandb.finish() 
 
-    pynvml.nvmlShutdown() 
+    if use_cuda:
+        pynvml.nvmlShutdown() 
 
 
 if __name__ == '__main__':
