@@ -35,8 +35,8 @@ MIN_MOVEMENT_THRESHOLD = 0.02
 
 class HandwritingRequest(BaseModel):
     text: str = Field(..., min_length=1, max_length=40, description="Text to generate handwriting for")
-    max_length: int = Field(default=700, ge=50, le=1500, description="Maximum number of stroke points")
-    bias: float = Field(default=0.75, ge=0.1, le=2.0, description="Sampling bias for generation")
+    max_length: int = Field(default=1000, ge=50, le=1200, description="Maximum number of stroke points")
+    bias: float = Field(default=2, ge=0.2, le=10.0, description="Sampling bias for generation")
 class HandwritingResponse(BaseModel):
     success: bool = True
     input_text: str

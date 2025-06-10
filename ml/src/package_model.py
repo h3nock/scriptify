@@ -1,16 +1,19 @@
-from typing import Optional
 import torch 
 import argparse 
 import traceback
+import torch.nn as nn 
 from pathlib import Path 
+from typing import Optional
+from src.models.rnn import HandwritingRNN
+from torch.quantization import quantize_dynamic
 from config.config import load_config, PROJECT_ROOT
 from src.data.dataloader import ProcessedHandwritingDataset
-from src.models.rnn import HandwritingRNN
 from src.utils.paths import RunPaths, find_latest_checkpoint
 
 def package_model(checkpoint_path: Path, 
                   output_base_name: str,
                   output_dir: Path,
+                  quantize: bool = False, 
                   config_path: Optional[Path] = None):
     """package trained model by saving its state_dict, model params and TorchScript traced version."""
     
@@ -48,8 +51,18 @@ def package_model(checkpoint_path: Path,
         else:
             new_state_dict[k] = v
     model.load_state_dict(new_state_dict)
-    model.to(device)
+
+    if quantize:
+        model.to(torch.device("cpu")) 
+    else: 
+        model.to(device)
+
     model.eval() 
+
+    if quantize: 
+        model = quantize_dynamic(model, 
+                                 {nn.LSTMCell,nn.Linear},
+                                 dtype=torch.qint8) 
 
     output_dir.mkdir(parents=True, exist_ok=True) 
     original_pkg_path = output_dir / f"{output_base_name}.pt" 
@@ -70,6 +83,10 @@ def package_model(checkpoint_path: Path,
         model.eval()
         traced_model = torch.jit.script(model) 
         traced_model_path = output_dir / f"{output_base_name}.scripted.pt"
+
+        if quantize:
+            traced_model_path = output_dir / f"{output_base_name}.scripted.quantized.pt"
+            
         torch.jit.save(traced_model, traced_model_path)
         print(f"TorchScript scripted model saved to: {traced_model_path}")
     except Exception as e:
@@ -97,7 +114,7 @@ def main():
     parser.add_argument(
         "--pkg_name", 
         type=str, 
-        default="handwriting_model", 
+        default="model", 
         help="Base name for the packaged model files" 
     )
     
@@ -106,6 +123,11 @@ def main():
         type=str, 
         default=None, 
         help="Path to the specific config.yaml file for the model" 
+    )
+    parser.add_argument(
+        "--quantize", 
+        action="store_true", 
+        help="Specify weather to apply quantization or not"
     )
     args = parser.parse_args() 
     checkpoint_path = None 
@@ -147,7 +169,10 @@ def main():
     pkg_output_dir = PROJECT_ROOT / args.output_dir 
 
     try:
-        package_model(checkpoint_path, args.pkg_name, pkg_output_dir, config_file_path)
+        package_model(checkpoint_path, 
+                      args.pkg_name, pkg_output_dir,
+                      quantize=args.quantize, config_path= config_file_path)
+
     except Exception as e:
         print(f"An error occurred packaging the model: {e}")
         traceback.print_exc()
