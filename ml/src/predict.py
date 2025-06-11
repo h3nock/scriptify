@@ -53,7 +53,7 @@ def load_model_for_prediction(checkpoint_path: Union[str, Path],config, device):
 #     c_len  = torch.tensor([len(idxs)], dtype=torch.long, device=device)
 #     return c, c_len 
 
-def predict_handwriting(model, text_to_generate, char_map: Dict[str, int], device, max_text_length: int, max_stroke_length=1200, bias=0.75):
+def predict_handwriting(model: HandwritingRNN, text_to_generate: str, char_map: Dict[str, int], device, max_text_length: int, max_stroke_length=1200, bias=0.75):
     """Generates handwriting for the given text."""
     model.eval()
     
