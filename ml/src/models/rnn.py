@@ -170,14 +170,15 @@ class HandwritingRNN(nn.Module):
         x = torch.zeros(batch_size, 3, device=device)  
         x[:, 2] = 1.0  # initial pen state  
           
-        if prime is not None:  
+        if prime is not None: 
+            # prime expected shape: (batch_size, seq_len, 3)  
             prime_seq_length = prime.size(1)  
             # process prime sequence to get initial hidden states  
             for t in range(prime_seq_length):  
-                x_t = prime[:, t, :]  
+                x_t = prime[:, t, :] # (batch_size, 3)  
                   
                 # LSTM 1  
-                lstm1_input = torch.cat([window, x_t], dim=1)  
+                lstm1_input = torch.cat([window, x_t], dim=1) # (batch_size, 3 + alphabet_size) 
                 h1, c1 = self.lstm1(lstm1_input, (h1, c1))  
                   
                 # Attention  
