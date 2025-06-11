@@ -2,11 +2,31 @@ from typing import Optional
 import torch  
 import numpy as np
 import torch.nn as nn  
+from dataclasses import dataclass 
 import torch.nn.functional as F
 
 from src.data.dataloader import ProcessedHandwritingDataset  
 from .attention import AttentionMechanism  
 from .gmm import GMMLayer  
+
+@dataclass 
+class PrimingData:
+    """combines data required for priming the HandwritingRNN sampling"""
+    stroke_tensors: torch.Tensor # (batch_size, num_prime_strokes, 3) 
+    char_seq_tensors: torch.Tensor # (batch_size, num_prime_chars)
+    char_seq_lengths: torch.Tensor # (batch_size,)
+
+    def __post_init__(self):
+        if not (self.stroke_tensors.ndim == 3 and self.stroke_tensors.size(2) == 2):
+            raise ValueError(f"Priming stroke_tensors must have shape (batch_size, num_prime_strokes, 3)")
+        if not (self.char_seq_tensors.ndim == 2):
+            raise ValueError(f"char_seq_tensors must have shape (batch_size,num_prime_chars)")
+        if not (self.char_seq_lengths.ndim == 1):
+            raise ValueError(f"char_seq_lengths must have shape (batch_size, )")
+    
+        batch_size = self.stroke_tensors.size(0)
+        if not (batch_size == self.char_seq_lengths.size(0) and batch_size == self.char_seq_lengths.size(0)):
+            raise ValueError("Batch sizes of all priming tensors must match")
   
 class HandwritingRNN(nn.Module):  
     def __init__(self,   
@@ -49,7 +69,8 @@ class HandwritingRNN(nn.Module):
                     tuple[ torch.Tensor, torch.Tensor, torch.Tensor,
                           torch.Tensor, torch.Tensor, torch.Tensor,
                           torch.Tensor, torch.Tensor]] = None, 
-                bias: Optional[torch.Tensor] = None):  
+                bias: Optional[torch.Tensor] = None
+                ):  
         
         if bias is None:
             bias = torch.tensor([0.5] * inputs.size(0), device=inputs.device, dtype=inputs.dtype)
@@ -145,7 +166,7 @@ class HandwritingRNN(nn.Module):
     @torch.jit.export  
     def sample(self, char_seq: torch.Tensor, char_seq_lengths: torch.Tensor,
                max_length: int = 1000, bias: float = 0.5,
-               prime: Optional[torch.Tensor] = None) -> list[torch.Tensor]:  
+               prime: Optional[PrimingData] = None) -> list[torch.Tensor]:  
 
         batch_size = char_seq.size(0)  
         device = char_seq.device  
@@ -171,11 +192,22 @@ class HandwritingRNN(nn.Module):
         x[:, 2] = 1.0  # initial pen state  
           
         if prime is not None: 
-            # prime expected shape: (batch_size, seq_len, 3)  
-            prime_seq_length = prime.size(1)  
+            priming_batch_size = prime.stroke_tensors.size(dim=0) 
+            if priming_batch_size != batch_size:
+                raise ValueError(f"Priming data batchsize {priming_batch_size} \
+                                 must match input text batchsize {batch_size}")
+
+            prime_strokes = prime.stroke_tensors
+            prime_chars_seq = prime.char_seq_tensors
+            prime_chars_lens = prime.char_seq_lengths
+
+            prime_char_one_hot = self.one_hot_encode(prime_chars_seq)
+            
+            # stroke_tensors expected shape: (batch_size, seq_len, 3)  
+            num_prime_strokes = prime_strokes.size(1) 
             # process prime sequence to get initial hidden states  
-            for t in range(prime_seq_length):  
-                x_t = prime[:, t, :] # (batch_size, 3)  
+            for t in range(num_prime_strokes):  
+                x_t = prime.stroke_tensors[:, t, :] # (batch_size, 3)  
                   
                 # LSTM 1  
                 lstm1_input = torch.cat([window, x_t], dim=1) # (batch_size, 3 + alphabet_size) 
@@ -183,7 +215,7 @@ class HandwritingRNN(nn.Module):
                   
                 # Attention  
                 window, kappa, phi = self.attention(  
-                    h1, window, kappa, x_t, char_one_hot, char_seq_lengths  
+                    h1, window, kappa, x_t,prime_char_one_hot, prime_chars_lens  
                 )  
                   
                 # LSTM 2  
@@ -194,7 +226,7 @@ class HandwritingRNN(nn.Module):
                 lstm3_input = torch.cat([x_t,h1, h2, window], dim=1)  
                 h3, c3 = self.lstm3(lstm3_input, (h3, c3))  
                   
-                if t == prime_seq_length - 1:  
+                if t == num_prime_strokes - 1:  
                     x = x_t  
           
         # generate sequence  
