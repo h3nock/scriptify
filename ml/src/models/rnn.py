@@ -25,7 +25,7 @@ class PrimingData:
             raise ValueError(f"char_seq_lengths must have shape (batch_size, )")
     
         batch_size = self.stroke_tensors.size(0)
-        if not (batch_size == self.char_seq_lengths.size(0) and batch_size == self.char_seq_lengths.size(0)):
+        if not (batch_size == self.char_seq_tensors.size(0) and batch_size == self.char_seq_lengths.size(0)):
             raise ValueError("Batch sizes of all priming tensors must match")
   
 class HandwritingRNN(nn.Module):  
@@ -228,7 +228,9 @@ class HandwritingRNN(nn.Module):
                   
                 if t == num_prime_strokes - 1:  
                     x = x_t  
-          
+            window = torch.zeros_like(window)
+            kappa  = torch.zeros_like(kappa) 
+
         # generate sequence  
         strokes = [] 
         if isinstance(bias, (float, int)):
