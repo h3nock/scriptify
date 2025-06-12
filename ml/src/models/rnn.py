@@ -17,10 +17,10 @@ class PrimingData:
     char_seq_lengths: torch.Tensor # (batch_size,)
 
     def __post_init__(self):
-        if not (self.stroke_tensors.ndim == 3 and self.stroke_tensors.size(2) == 2):
-            raise ValueError(f"Priming stroke_tensors must have shape (batch_size, num_prime_strokes, 3)")
+        if not (self.stroke_tensors.ndim == 3 and self.stroke_tensors.size(2) == 3):
+            raise ValueError(f"Priming stroke_tensors must have shape (batch_size, num_prime_strokes, 3) but provided {self.stroke_tensors.size()}")
         if not (self.char_seq_tensors.ndim == 2):
-            raise ValueError(f"char_seq_tensors must have shape (batch_size,num_prime_chars)")
+            raise ValueError(f"char_seq_tensors must have shape (batch_size,num_prime_chars) but provided {self.char_seq_tensors.size()}")
         if not (self.char_seq_lengths.ndim == 1):
             raise ValueError(f"char_seq_lengths must have shape (batch_size, )")
     
