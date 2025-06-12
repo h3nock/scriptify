@@ -4,7 +4,7 @@ import torch
 import argparse
 import numpy as np
 from pathlib import Path
-from src.utils.text_utils import construct_alphabet_list, encode_text, get_alphabet_map, load_np_strokes, load_text
+from src.utils.text_utils import construct_alphabet_list, encode_text, get_alphabet_map, load_np_strokes, load_priming_data, load_text
 from src.models.rnn import HandwritingRNN, PrimingData
 from src.utils.paths import RunPaths, find_latest_run_checkpoint
 from src.utils.stroke_viz import plot_offset_strokes 
@@ -68,9 +68,9 @@ def predict_handwriting(model: HandwritingRNN, text_to_generate: str, char_map: 
     primingData = None 
     
     if prime:
-        priming_text = load_text(f"./data/samples/sample{prime}.txt")
-        priming_strokes = load_np_strokes(f"./data/samples/sample{prime}.npy")
-
+   
+        priming_text, priming_strokes = load_priming_data(style=prime) 
+        
         priming_stroke_tensor = torch.tensor(priming_strokes, dtype=torch.float32, device=device).unsqueeze(dim=0)
         encoded_priming_text, priming_text_len = encode_text(priming_text, char_map, max_length=len(priming_text), add_eos=False)
         encoded_priming_text_tensor = torch.tensor(encoded_priming_text, dtype=torch.long, device=device).unsqueeze(dim=0)
