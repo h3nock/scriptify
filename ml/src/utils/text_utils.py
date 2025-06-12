@@ -39,7 +39,7 @@ def load_np_strokes(stroke_path: Union[Path, str]) -> np.ndarray:
     """loads stroke sequence from stroke_path"""
     stroke_path = Path(stroke_path)
     if not stroke_path.exists():
-        raise FileNotFoundError(f"Prime strokes file not found at {stroke_path}")
+        raise FileNotFoundError(f"style strokes file not found at {stroke_path}")
     
     return np.load(stroke_path)
 
@@ -58,3 +58,10 @@ def load_text(text_path: Union[Path, str]) -> str:
 
     except Exception as e:
         raise IOError(f"Error reading text file {text_path}: {e}")
+
+def load_priming_data(style: int):
+    
+    priming_text = load_text(f"./data/samples/sample{style}.txt")
+    priming_strokes = load_np_strokes(f"./data/samples/sample{style}.npy")
+    
+    return priming_text, priming_strokes 
