@@ -47,7 +47,7 @@ def load_text(text_path: Union[Path, str]) -> str:
     """loads text from a text_path""" 
     text_path = Path(text_path) 
     if not text_path.exists():
-        FileNotFoundError(f"Text file not found at {text_path}")
+        raise FileNotFoundError(f"Text file not found at {text_path}")
     if not text_path.is_file():
         raise IsADirectoryError(f"Path is a directory, not a file.")
     
