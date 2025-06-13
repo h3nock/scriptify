@@ -2,7 +2,7 @@ from typing import NamedTuple, Optional
 import torch  
 import numpy as np
 import torch.nn as nn  
-from dataclasses import dataclass 
+# Removed unused import
 import torch.nn.functional as F
 
 from src.data.dataloader import ProcessedHandwritingDataset  
