@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import NamedTuple, Optional
 import torch  
 import numpy as np
 import torch.nn as nn  
@@ -9,24 +9,11 @@ from src.data.dataloader import ProcessedHandwritingDataset
 from .attention import AttentionMechanism  
 from .gmm import GMMLayer  
 
-@dataclass 
-class PrimingData:
+class PrimingData(NamedTuple):
     """combines data required for priming the HandwritingRNN sampling"""
     stroke_tensors: torch.Tensor # (batch_size, num_prime_strokes, 3) 
     char_seq_tensors: torch.Tensor # (batch_size, num_prime_chars)
     char_seq_lengths: torch.Tensor # (batch_size,)
-
-    def __post_init__(self):
-        if not (self.stroke_tensors.ndim == 3 and self.stroke_tensors.size(2) == 3):
-            raise ValueError(f"Priming stroke_tensors must have shape (batch_size, num_prime_strokes, 3) but provided {self.stroke_tensors.size()}")
-        if not (self.char_seq_tensors.ndim == 2):
-            raise ValueError(f"char_seq_tensors must have shape (batch_size,num_prime_chars) but provided {self.char_seq_tensors.size()}")
-        if not (self.char_seq_lengths.ndim == 1):
-            raise ValueError(f"char_seq_lengths must have shape (batch_size, )")
-    
-        batch_size = self.stroke_tensors.size(0)
-        if not (batch_size == self.char_seq_tensors.size(0) and batch_size == self.char_seq_lengths.size(0)):
-            raise ValueError("Batch sizes of all priming tensors must match")
   
 class HandwritingRNN(nn.Module):  
     def __init__(self,   
@@ -192,14 +179,25 @@ class HandwritingRNN(nn.Module):
         x[:, 2] = 1.0  # initial pen state  
           
         if prime is not None: 
-            priming_batch_size = prime.stroke_tensors.size(dim=0) 
-            if priming_batch_size != batch_size:
-                raise ValueError(f"Priming data batchsize {priming_batch_size} \
-                                 must match input text batchsize {batch_size}")
-
             prime_strokes = prime.stroke_tensors
             prime_chars_seq = prime.char_seq_tensors
             prime_chars_lens = prime.char_seq_lengths
+
+
+            if not (prime_strokes.ndim == 3 and prime_strokes.size(2) == 3):
+                raise ValueError(f"stroke_tensors must have shape (batch_size, num_prime_strokes, 3)")
+            if not (prime_chars_seq.ndim == 2):
+                raise ValueError(f"char_seq_tensors must have shape (batch_size, num_prime_chars)")
+            if not (prime_chars_lens.ndim == 1):
+                raise ValueError(f"char_seq_lengths must have shape (batch_size,)")
+            
+            priming_batch_size = prime_strokes.size(0)
+            if not (priming_batch_size == prime_chars_seq.size(0) and priming_batch_size == prime_chars_lens.size(0)):
+                raise ValueError("Batch sizes of all priming tensors must match")
+        
+            if priming_batch_size != batch_size:
+                raise ValueError(f"Priming data batchsize {priming_batch_size} \
+                                 must match input text batchsize {batch_size}")
 
             prime_char_one_hot = self.one_hot_encode(prime_chars_seq)
             
@@ -227,7 +225,9 @@ class HandwritingRNN(nn.Module):
                 h3, c3 = self.lstm3(lstm3_input, (h3, c3))  
                   
                 if t == num_prime_strokes - 1:  
-                    x = x_t  
+                    x = x_t 
+                    x[:2] = 1.0 
+                     
             window = torch.zeros_like(window)
             kappa  = torch.zeros_like(kappa) 
 
