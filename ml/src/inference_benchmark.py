@@ -30,7 +30,7 @@ MAX_TEXT_LEN: Optional[int] = None
 
 use_cuda: bool = False
 
-def text_to_tensor(text: str) -> tuple[torch.Tensor, torch.Tensor]:
+def text_to_tensor(text: str, max_text_length: int, add_eos: bool = True) -> tuple[torch.Tensor, torch.Tensor]:
     """Convert text to tensor format expected by the model"""
 
     if ALPHABET_MAP is None:
@@ -43,7 +43,8 @@ def text_to_tensor(text: str) -> tuple[torch.Tensor, torch.Tensor]:
     padded_encoded_np, true_length = encode_text(
         text=text, 
         char_to_index_map=ALPHABET_MAP, 
-        max_length=MAX_TEXT_LEN 
+        max_length=max_text_length, 
+        add_eos=add_eos
     )
 
     char_seq = torch.from_numpy(padded_encoded_np).unsqueeze(0).to(device=DEVICE, dtype=torch.long)
@@ -121,11 +122,16 @@ def sample(  char_seq: torch.Tensor,
     if style: 
         priming_text, priming_strokes = load_priming_data(style) 
 
-        priming_text_tensor, priming_text_len_tensor = text_to_tensor(priming_text)
+        priming_text_tensor, priming_text_len_tensor = text_to_tensor(
+            priming_text, max_text_length=len(priming_text), add_eos=False)
 
-        priming_stroke_tensor = torch.tensor(priming_strokes, dtype=torch.float32, device=DEVICE).unsqueeze(dim=0)
+        priming_stroke_tensor = torch.tensor(priming_strokes, 
+                                             dtype=torch.float32, 
+                                             device=DEVICE).unsqueeze(dim=0)
         
-        primingData = PrimingData(priming_stroke_tensor, char_seq_tensors=priming_text_tensor, char_seq_lengths=priming_text_len_tensor)
+        primingData = PrimingData(priming_stroke_tensor,
+                                  char_seq_tensors=priming_text_tensor, 
+                                  char_seq_lengths=priming_text_len_tensor)
 
     with torch.inference_mode():
         try:
@@ -214,7 +220,7 @@ def main():
     parser.add_argument("--text", type=str, default="Hello World", help="Text to generate to text the inference with.")
     parser.add_argument("--num_runs", type=int, default=100, help="The number of runs to per setting")
     parser.add_argument("--max_stroke_len", type=int, default=1200, help="Maximum length of the generated stroke sequence.")
-    parser.add_argument("--bias", type=float, default=2, help="Sampling bias (temperature). Lower values make it more deterministic.")
+    parser.add_argument("--bias", type=float, default=1, help="Sampling bias (temperature). Lower values make it more deterministic.")
     parser.add_argument("--no_cuda", action="store_true", help="Disable CUDA even if available.")
     parser.add_argument("--quantized", action="store_true", help="weather to use quantized model or not")
     parser.add_argument("--style", type=int, default=None, help="Optional style choice index from list of styles provided") 
@@ -225,11 +231,11 @@ def main():
     use_cuda = not args.no_cuda and torch.cuda.is_available()  and not args.quantized 
 
     if use_cuda:
-        device = torch.device("cuda")
+        DEVICE = torch.device("cuda")
         pynvml.nvmlInit()
         print("Using GPU for prediction.")
     else:
-        device = torch.device("cpu")
+        DEVICE = torch.device("cpu")
         print("Using CPU for prediction.")
 
     model_path =  Path(args.model_path)
@@ -241,11 +247,10 @@ def main():
 
     init_model (model_dir=model_path, quantized=args.quantized)
 
-    char_seq_tensor, char_lengths_tensor = text_to_tensor(args.text)
+    char_seq_tensor, char_lengths_tensor = text_to_tensor(args.text, max_text_length=MAX_TEXT_LEN) #type: ignore 
 
     # a warmp up turn 
     generated_strokes = sample(char_seq_tensor, char_lengths=char_lengths_tensor, max_gen_len=1200,bias=args.bias, style=args.style)
-    logger.info(f"generated_strokes: {generated_strokes[:10]}")
     generated_strokes_np = np.array([stroke.squeeze(0).cpu().numpy() for stroke in generated_strokes])
     plot_offset_strokes(generated_strokes_np,"./packaged_models/", plot_only_text=True)
     run_name = model_path.name  
