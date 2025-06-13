@@ -1,11 +1,11 @@
 import os
-from typing import Dict, Union
+from typing import Dict, Optional, Union
 import torch
 import argparse
 import numpy as np
 from pathlib import Path
-from src.utils.text_utils import construct_alphabet_list, encode_text, get_alphabet_map
-from src.models.rnn import HandwritingRNN
+from src.utils.text_utils import construct_alphabet_list, encode_text, get_alphabet_map, load_np_strokes, load_priming_data, load_text
+from src.models.rnn import HandwritingRNN, PrimingData
 from src.utils.paths import RunPaths, find_latest_run_checkpoint
 from src.utils.stroke_viz import plot_offset_strokes 
 from config.config import load_config 
@@ -53,9 +53,9 @@ def load_model_for_prediction(checkpoint_path: Union[str, Path],config, device):
 #     c_len  = torch.tensor([len(idxs)], dtype=torch.long, device=device)
 #     return c, c_len 
 
-def predict_handwriting(model, text_to_generate, char_map: Dict[str, int], device, max_text_length: int, max_stroke_length=1200, bias=0.75):
+def predict_handwriting(model: HandwritingRNN, text_to_generate: str, char_map: Dict[str, int], device, max_text_length: int, max_stroke_length=1200, bias=0.75, prime: Optional[int] = None):
     """Generates handwriting for the given text."""
-    model.eval()
+    model.eval() 
     
     encoded_np_array, actual_text_length = encode_text(text=text_to_generate,
                                    char_to_index_map=char_map, 
@@ -63,9 +63,23 @@ def predict_handwriting(model, text_to_generate, char_map: Dict[str, int], devic
                                    )
     c = torch.tensor(np.array([encoded_np_array]), dtype=torch.long, device=device) 
     c_len = torch.tensor([actual_text_length], dtype=torch.long, device=device)
+
     
+    primingData = None 
+    
+    if prime is not None:
+   
+        priming_text, priming_strokes = load_priming_data(style=prime) 
+        
+        priming_stroke_tensor = torch.tensor(priming_strokes, dtype=torch.float32, device=device).unsqueeze(dim=0)
+        encoded_priming_text, priming_text_len = encode_text(priming_text, char_map, max_length=len(priming_text), add_eos=False)
+        encoded_priming_text_tensor = torch.tensor(encoded_priming_text, dtype=torch.long, device=device).unsqueeze(dim=0)
+        priming_text_len_tensor = torch.tensor([priming_text_len], dtype=torch.long, device=device)
+        primingData = PrimingData(priming_stroke_tensor, char_seq_tensors=encoded_priming_text_tensor, char_seq_lengths=priming_text_len_tensor)
+
     with torch.no_grad():
-        strokes = model.sample(c, c_len, max_length=max_stroke_length, bias=bias)
+        strokes = model.sample(c, c_len, max_length=max_stroke_length, bias=bias, prime=primingData)
+
     if strokes:
         # just take the first sample (since we aren't doing batch prediction)
         strokes = [stroke.squeeze(0).cpu().numpy() for stroke in strokes]
@@ -87,7 +101,7 @@ def main():
     parser.add_argument("--bias", type=float, default=1, help="Sampling bias (temperature). Lower values make it more deterministic.")
     parser.add_argument("--output_file", type=str, default=None, help="Optional path to save the generated strokes as cha .npy file.")
     parser.add_argument("--no_cuda", action="store_true", help="Disable CUDA even if available.")
-    
+    parser.add_argument("--style", type=int, default=None, help="Optional style choice index from list of styles provided") 
     args = parser.parse_args()
 
     if not args.no_cuda and torch.cuda.is_available():
@@ -129,6 +143,7 @@ def main():
             
             max_text_len_for_encoding = run_config.dataset.max_text_len 
             model, char_map = load_model_for_prediction(checkpoint_path,run_config, device)
+
             generated_strokes = predict_handwriting(
                 model, 
                 args.text, 
@@ -136,7 +151,8 @@ def main():
                 device, 
                 max_text_length=max_text_len_for_encoding,
                 max_stroke_length=args.max_length, 
-                bias=args.bias
+                bias=args.bias, 
+                prime=args.style
             )
             
             if generated_strokes.size > 0:

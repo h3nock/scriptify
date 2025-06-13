@@ -9,8 +9,9 @@ import threading
 import numpy as np 
 from pathlib import Path 
 from typing import Optional
+from src.models.rnn import PrimingData
 from src.utils.stroke_viz import plot_offset_strokes
-from src.utils.text_utils import construct_alphabet_list, encode_text, get_alphabet_map
+from src.utils.text_utils import construct_alphabet_list, encode_text, get_alphabet_map, load_priming_data
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__) 
@@ -19,38 +20,42 @@ QUANTIZED_MODEL_NAME = "model.scripted.quantized.pt"
 SCRIPTED_MODEL_NAME = "model.scripted.pt" 
 METADATA_MODEL_NAME = "model.pt" 
 
-scripted_model: Optional[torch.jit.ScriptModule] = None 
-model_metadata: Optional[dict] = None 
-device: Optional[torch.device] = None 
-alphabet_map: Optional[dict[str, int]] = None 
+SCRIPTED_MODEL: Optional[torch.jit.ScriptModule] = None 
+MODEL_METADATA: Optional[dict] = None 
+DEVICE: Optional[torch.device] = None 
+ALPHABET_MAP: Optional[dict[str, int]] = None 
 ALPHABET_LIST: Optional[list[str]] = None 
 ALPHABET_SIZE: Optional[int] = None 
-max_text_len: Optional[int] = None 
+MAX_TEXT_LEN: Optional[int] = None 
 
 use_cuda: bool = False
 
-def text_to_tensor(text: str, device: torch.device) -> tuple[torch.Tensor, torch.Tensor]:
+def text_to_tensor(text: str, max_text_length: int, add_eos: bool = True) -> tuple[torch.Tensor, torch.Tensor]:
     """Convert text to tensor format expected by the model"""
-    global alphabet_map, max_text_len  
-    if alphabet_map is None:
-        raise ValueError("Alphabet map not initialized during api startup")
-    if max_text_len is None:
-        raise ValueError("`max_text_len` is not initialized during api startup")
+
+    if ALPHABET_MAP is None:
+        raise ValueError("ALPHABET_MAP is not initialized during api startup")
+    if MAX_TEXT_LEN is None:
+        raise ValueError("`MAX_TEXT_LEN` is not initialized during api startup")
+    if DEVICE is None: 
+        raise ValueError("`DEVICE` is not initialized") 
+
     padded_encoded_np, true_length = encode_text(
         text=text, 
-        char_to_index_map=alphabet_map, 
-        max_length=max_text_len 
+        char_to_index_map=ALPHABET_MAP, 
+        max_length=max_text_length, 
+        add_eos=add_eos
     )
 
-    char_seq = torch.from_numpy(padded_encoded_np).unsqueeze(0).to(device=device, dtype=torch.long)
-    char_len = torch.tensor([true_length], device=device, dtype=torch.long)
+    char_seq = torch.from_numpy(padded_encoded_np).unsqueeze(0).to(device=DEVICE, dtype=torch.long)
+    char_len = torch.tensor([true_length], device=DEVICE, dtype=torch.long)
 
     return char_seq, char_len
 
 
 def init_model(model_dir: Path, quantized: bool = False):
 
-    global scripted_model, model_metadata, alphabet_map, max_text_len, ALPHABET_LIST, ALPHABET_SIZE
+    global SCRIPTED_MODEL, MODEL_METADATA, ALPHABET_MAP, MAX_TEXT_LEN, ALPHABET_LIST, ALPHABET_SIZE
     logger.info("Attempting to load model resources during startup") 
     try:
         
@@ -65,19 +70,19 @@ def init_model(model_dir: Path, quantized: bool = False):
             raise FileNotFoundError(f"Metadata model file not found at {metadata_model_path}")
 
         # Load the traced model
-        scripted_model = torch.jit.load(scripted_model_path, map_location=device)
+        SCRIPTED_MODEL = torch.jit.load(scripted_model_path, map_location=DEVICE)
         
-        if scripted_model:
-            scripted_model.eval()
+        if SCRIPTED_MODEL:
+            SCRIPTED_MODEL.eval()
             logger.info(f"Traced model loaded successfully from {scripted_model_path}")
 
         # Load the metadata
-        model_metadata = torch.load(metadata_model_path, map_location='cpu')
-        if model_metadata:
+        MODEL_METADATA = torch.load(metadata_model_path, map_location='cpu')
+        if MODEL_METADATA:
             logger.info(f"Model metadata loaded successfully from {metadata_model_path}")
-            logger.info(f"Model metadata keys: {list(model_metadata.keys())}")
+            logger.info(f"Model metadata keys: {list(MODEL_METADATA.keys())}")
             
-            config_full = model_metadata['config_full']
+            config_full = MODEL_METADATA['config_full']
             if not config_full or not isinstance(config_full, dict):
                 raise ValueError(f"Key `config_full` not found or not a dict")
             
@@ -87,11 +92,11 @@ def init_model(model_dir: Path, quantized: bool = False):
             if not dataset_config or not isinstance(dataset_config, dict):
                 raise ValueError(f"Key `dataset` not found or not a dict in config_full")
             alphabet_str = dataset_config['alphabet_string']
-            max_text_len = dataset_config['max_text_len']
+            MAX_TEXT_LEN = dataset_config['max_text_len']
 
             ALPHABET_LIST = construct_alphabet_list(alphabet_str)
             ALPHABET_SIZE = len(ALPHABET_LIST)
-            alphabet_map = get_alphabet_map(ALPHABET_LIST) 
+            ALPHABET_MAP = get_alphabet_map(ALPHABET_LIST) 
             
             logger.info(f"Alphabet created. Size: {len(ALPHABET_LIST)}")
             logger.info("Model resources are loaded and ready")
@@ -100,25 +105,42 @@ def init_model(model_dir: Path, quantized: bool = False):
 
     except Exception as e:
         logger.error(f"Error loading model resources: {e}", exc_info=True)
-        scripted_model = None
-        model_metadata = None
+        SCRIPTED_MODEL = None
+        MODEL_METADATA = None
         raise
      
 def sample(  char_seq: torch.Tensor,
     char_lengths: torch.Tensor,
     max_gen_len: int,
-    bias: float,): 
-    global scripted_model
-    if scripted_model is None:
+    bias: float,
+    style: Optional[int] = None): 
+
+    if SCRIPTED_MODEL is None:
         raise ValueError("Scripted model not initialized.")
     
+    primingData = None 
+    if style: 
+        priming_text, priming_strokes = load_priming_data(style) 
+
+        priming_text_tensor, priming_text_len_tensor = text_to_tensor(
+            priming_text, max_text_length=len(priming_text), add_eos=False)
+
+        priming_stroke_tensor = torch.tensor(priming_strokes, 
+                                             dtype=torch.float32, 
+                                             device=DEVICE).unsqueeze(dim=0)
+        
+        primingData = PrimingData(priming_stroke_tensor,
+                                  char_seq_tensors=priming_text_tensor, 
+                                  char_seq_lengths=priming_text_len_tensor)
+
     with torch.inference_mode():
         try:
-            stroke_tensors = scripted_model.sample(
+            stroke_tensors = SCRIPTED_MODEL.sample(
                 char_seq, 
                 char_lengths, 
                 max_length=max_gen_len, 
-                bias=bias
+                bias=bias, 
+                prime=primingData,
             )
             return stroke_tensors
         
@@ -172,7 +194,7 @@ def benchmark(text: str, run_name: str, runs: int, chars: torch.Tensor, chars_le
         cpu_peaks.append(peak['cpu'])
         gpu_peaks.append(peak['gpu'])
         if use_cuda:
-            gpu_mem_peaks.append(torch.cuda.max_memory_allocated(device) / 1e6) # MB
+            gpu_mem_peaks.append(torch.cuda.max_memory_allocated(DEVICE) / 1e6) # MB
         else:
             gpu_mem_peaks.append(0)
 
@@ -191,17 +213,17 @@ def benchmark(text: str, run_name: str, runs: int, chars: torch.Tensor, chars_le
     wandb.log(summary) 
 
 def main():
-    global device, use_cuda  
+    global DEVICE, use_cuda  
 
     parser = argparse.ArgumentParser(description="Benchmark inference")
     parser.add_argument("--model_path", type=str, default="./packaged_models/", help="Path to the run directory contianing packaged model metadata (`model.pt`) and the scripted model (`model.scripted.pt`). By default, each run's packages are stored separetly inside packaged_models")
     parser.add_argument("--text", type=str, default="Hello World", help="Text to generate to text the inference with.")
     parser.add_argument("--num_runs", type=int, default=100, help="The number of runs to per setting")
     parser.add_argument("--max_stroke_len", type=int, default=1200, help="Maximum length of the generated stroke sequence.")
-    parser.add_argument("--bias", type=float, default=2, help="Sampling bias (temperature). Lower values make it more deterministic.")
+    parser.add_argument("--bias", type=float, default=1, help="Sampling bias (temperature). Lower values make it more deterministic.")
     parser.add_argument("--no_cuda", action="store_true", help="Disable CUDA even if available.")
     parser.add_argument("--quantized", action="store_true", help="weather to use quantized model or not")
-    
+    parser.add_argument("--style", type=int, default=None, help="Optional style choice index from list of styles provided") 
     args = parser.parse_args()
 
     torch.manual_seed(seed=42)
@@ -209,11 +231,11 @@ def main():
     use_cuda = not args.no_cuda and torch.cuda.is_available()  and not args.quantized 
 
     if use_cuda:
-        device = torch.device("cuda")
+        DEVICE = torch.device("cuda")
         pynvml.nvmlInit()
         print("Using GPU for prediction.")
     else:
-        device = torch.device("cpu")
+        DEVICE = torch.device("cpu")
         print("Using CPU for prediction.")
 
     model_path =  Path(args.model_path)
@@ -225,11 +247,10 @@ def main():
 
     init_model (model_dir=model_path, quantized=args.quantized)
 
-    char_seq_tensor, char_lengths_tensor = text_to_tensor(args.text, device)
+    char_seq_tensor, char_lengths_tensor = text_to_tensor(args.text, max_text_length=MAX_TEXT_LEN) #type: ignore 
 
     # a warmp up turn 
-    generated_strokes = sample(char_seq_tensor, char_lengths=char_lengths_tensor, max_gen_len=1200,bias=2)
-    logger.info(f"generated_strokes: {generated_strokes[:10]}")
+    generated_strokes = sample(char_seq_tensor, char_lengths=char_lengths_tensor, max_gen_len=1200,bias=args.bias, style=args.style)
     generated_strokes_np = np.array([stroke.squeeze(0).cpu().numpy() for stroke in generated_strokes])
     plot_offset_strokes(generated_strokes_np,"./packaged_models/", plot_only_text=True)
     run_name = model_path.name  
