@@ -67,7 +67,7 @@ def predict_handwriting(model: HandwritingRNN, text_to_generate: str, char_map: 
     
     primingData = None 
     
-    if prime:
+    if prime is not None:
    
         priming_text, priming_strokes = load_priming_data(style=prime) 
         
