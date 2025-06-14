@@ -147,7 +147,7 @@ class HandwritingTrainer:
         c_len = batch['chars_len'].to(self.device)  
           
         # forward pass  
-        (pis, sigmas, rhos, mus, es), _ = self.model(x, c, c_len)  
+        pis, sigmas, rhos, mus, es, _ = self.model(x, c, c_len)  
           
         # calculate loss  
         sequence_loss, element_loss = gaussian_mixture_loss(y, x_len, pis, sigmas, rhos, mus, es)  
@@ -181,7 +181,7 @@ class HandwritingTrainer:
                 c = batch['chars'].to(self.device)  
                 c_len = batch['chars_len'].to(self.device)  
                   
-                (pis, sigmas, rhos, mus, es), _ = self.model(x, c, c_len)  
+                pis, sigmas, rhos, mus, es, _ = self.model(x, c, c_len)  
                   
                 _, element_loss = gaussian_mixture_loss(y, x_len, pis, sigmas, rhos, mus, es)  
                 val_losses.append(element_loss.item())  

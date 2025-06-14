@@ -3,13 +3,13 @@ import yaml
 from pathlib import Path
 from typing import Union 
 from dotenv import load_dotenv
-from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import BaseModel, Field, ValidationInfo, field_validator
-
-load_dotenv()
 
 # points to ml directory  
 PROJECT_ROOT  =  Path(__file__).resolve().parent.parent 
+
+load_dotenv(dotenv_path=PROJECT_ROOT / '.env' )
+
 class Paths(BaseModel):
     raw_data_root: Path
     raw_ascii_subdir_name: str = "ascii"
@@ -83,14 +83,6 @@ class TrainingParams(BaseModel):
     
 class PredictionParams(BaseModel):
     max_length: int = Field(1000, gt=0)
-
-class DistributedTrainingConfig(BaseSettings):
-    model_config = SettingsConfigDict(env_prefix='SCRIPTIFY_DIST_', extra='ignore', case_sensitive=False)
-
-    backend: str = "nccl"
-    master_addr: str = "localhost"
-    master_port: int = 29500
-
 class WandBConfig(BaseModel):
     enabled: bool = Field(True, description="enable weights and biases logging") 
     project_name: str = Field("Scriptify")
@@ -106,7 +98,6 @@ class Config(BaseModel):
     model_params: ModelParams 
     training_params: TrainingParams 
     prediction_params: PredictionParams 
-    distributed_training: DistributedTrainingConfig = Field(default_factory=DistributedTrainingConfig)
     wandb: WandBConfig
      
 DEFAULT_CONFIG_PATH = PROJECT_ROOT / "config" / "config.yaml"
