@@ -1,4 +1,8 @@
+from typing import Callable, Literal
 import numpy as np
+from scipy.signal import medfilt, savgol_filter
+
+SmoothMethod = Literal['median', 'savgol']
 
 def stroke_coords_to_offsets(stroke_coords):
     """
@@ -64,6 +68,7 @@ def create_mask(line_stroke, max_points=2048):
     mask = np.zeros(max_points, dtype=np.float32)
     mask[:min(n, max_points)] = 1
     return mask
+
 def normalize(offsets):  
     """  
     normalizes strokes to median unit norm  
@@ -78,3 +83,35 @@ def normalize(offsets):
     if median_norm > esp:
         offsets[:,:2] /= median_norm 
     return offsets 
+
+def _median_smoother(offsets: np.ndarray,*, kernel_size: int, **_) -> np.ndarray:
+    xs = medfilt(offsets[:,0], kernel_size=kernel_size) 
+    ys = medfilt(offsets[:, 1], kernel_size=kernel_size) 
+    return np.stack([xs, ys, offsets[:,2]], axis=1)
+
+def _savgol_smoother(offsets: np.ndarray, *, window_length: int, 
+                     polyorder: int, **_) -> np.ndarray:
+    xs = savgol_filter(offsets[:,0],window_length, polyorder) 
+    ys = savgol_filter(offsets[:, 1],window_length, polyorder) 
+    return np.stack([xs, ys, offsets[:,2]], axis=1) 
+
+def smooth_offsets(offsets: np.ndarray, method: SmoothMethod = 'median',*,
+                   kernel_size: int = 5, window_length: int = 7, 
+                   polyorder: int = 2) -> np.ndarray:
+    """
+    Smoothes stroke offset. 
+    - method: 'median' or 'savgol' 
+    - kernel_size: used for median only 
+    - window_length & polyorder: used for savgol only 
+    """ 
+    if  method not in _SMOOTHERS:
+        raise ValueError(f"Unsupported smoothing method: {method}. Choose from: {_SMOOTHERS}")
+    func = _SMOOTHERS[method] 
+
+    return func(offsets, kernel_size=kernel_size, window_length = window_length,
+                polyorder = polyorder)
+
+_SMOOTHERS: dict[SmoothMethod, Callable] = {
+    'median': _median_smoother, 
+    'savgol': _savgol_smoother
+}
