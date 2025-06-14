@@ -84,6 +84,13 @@ def normalize(offsets):
         offsets[:,:2] /= median_norm 
     return offsets 
 
+def has_outlier(offsets: np.ndarray, threshold: float) -> bool:
+    """check if any consecutive points have eculidian distance > threshold"""
+    deltas = offsets[1:,:2] - offsets[:-1,:2] 
+    mags = np.linalg.norm(deltas, axis=1)
+
+    return bool(np.any(mags > threshold)) 
+
 def _median_smoother(offsets: np.ndarray,*, kernel_size: int, **_) -> np.ndarray:
     xs = medfilt(offsets[:,0], kernel_size=kernel_size) 
     ys = medfilt(offsets[:, 1], kernel_size=kernel_size) 
