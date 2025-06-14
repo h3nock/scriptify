@@ -1,5 +1,5 @@
 import os
-from typing import Optional
+from typing import Optional, Union
 import torch
 import wandb 
 from datetime import datetime 
@@ -15,25 +15,28 @@ from src.utils.paths import RunPaths
 
 config_global = load_config()
 
+RANK = 'RANK' # global rank of the process 
+WORLD_SIZE = 'WORLD_SIZE' # total number of processes across all nodes  
+LOCAL_RANK = 'LOCAL_RANK' # local rank of the process on the current node 
+
 def setup(rank, world_size):
     """Initialize distributed training process group"""
-    #TODO: handle distributed training config params later 
-    dist_config = config_global.distributed_training
-    os.environ['MASTER_ADDR'] = dist_config.master_addr
-    os.environ['MASTER_PORT'] = str(dist_config.master_port)
-    dist.init_process_group(dist_config.backend, rank=rank, world_size=world_size)
+    backend = os.environ.get('SCRIPTIFY_DIST_BACKEND', 'nccl')
+    dist.init_process_group(backend=backend, rank=rank, world_size=world_size)
 
 def cleanup():
     """Clean up distributed training process group"""
-    dist.destroy_process_group()
+    if dist.is_initialized():
+        dist.destroy_process_group()
 
-def train(rank, world_size):
+def train(rank,local_rank, world_size):
     """Training function to run on each GPU"""
-    # setup process group
-    setup(rank, world_size)
+    if world_size > 1:
+        # setup process group
+        setup(rank, world_size)
     
     # set device for this process
-    device = torch.device(f"cuda:{rank}")
+    device = torch.device(f"cuda:{local_rank}")
     torch.cuda.set_device(device)
     
     # load dataset
@@ -48,7 +51,16 @@ def train(rank, world_size):
         full_dataset, [train_size, val_size], generator=generator
     )
     
-    run_paths = RunPaths(base_outputs_dir=config_global.paths.outputs_dir)
+    run_name_container: list[Union[str,None]] = [None]
+    if rank == 0:
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S") 
+        run_name_container[0] = f"run_{timestamp}"
+
+    if world_size > 1:
+        dist.broadcast_object_list(run_name_container,0)
+
+    run_name = run_name_container[0]
+    run_paths = RunPaths(run_name, base_outputs_dir=config_global.paths.outputs_dir)
     wandb_run = None 
     if rank == 0: 
         run_paths.create_directories() 
@@ -59,9 +71,15 @@ def train(rank, world_size):
                 **config_global.dataset.model_dump(),
                 **config_global.model_params.model_dump(),
                 **config_global.training_params.model_dump(),
-                **config_global.distributed_training.model_dump(), 
+                # Add environment info
                 "world_size": world_size,
                 "device_type": device.type,
+                "local_rank": local_rank,
+                "global_rank": rank,
+                "master_addr": os.environ.get('MASTER_ADDR', 'unknown'),
+                "master_port": os.environ.get('MASTER_PORT', 'unknown'),
+                "hostname": os.environ.get('HOSTNAME', 'unknown'),
+                "pytorch_version": torch.__version__,
             }
                 
             wandb_run = wandb.init(
@@ -88,7 +106,11 @@ def train(rank, world_size):
     model.to(device)
     if rank == 0 and wandb_run and config_global.wandb.watch_model_log_freq > 0:
         wandb.watch(model, log="gradients", log_freq=config_global.wandb.watch_model_log_freq)
-    ddp_model = DDP(model, device_ids=[rank])
+    
+    if world_size > 1:
+        ddp_model = DDP(model, device_ids=[local_rank])
+    else:
+        ddp_model = model 
     
     # init trainer 
     trainer = HandwritingTrainer(
@@ -113,30 +135,37 @@ def train(rank, world_size):
         print(f"Training completed. Best model at step {best_step}")
         if wandb_run:
             wandb_run.finish() 
-    
-    # clean up
-    cleanup()
+
+    if world_size > 1: 
+        # clean up
+        cleanup()
 
 def main():
     if not torch.cuda.is_available():
         print("CUDA is not available. Running on CPU.")
-        return
-    try:
-        # set the multiprocessing start method
-        torch.multiprocessing.set_start_method('spawn', force=True)
+        return 1
+
+    if all(key in os.environ for key in [RANK, WORLD_SIZE, LOCAL_RANK]):
+
+        rank = int(os.environ[RANK]) 
+        world_size = int(os.environ[WORLD_SIZE])
+        local_rank = int(os.environ[LOCAL_RANK])
         
-        # get the number of available GPUs
-        world_size = torch.cuda.device_count()
-        print(f"Found {world_size} GPUs")
-        if world_size == 1:
-            print("Only one GPU found, running without DDP")
-            train(0, 1)
-        else:
-            mp.spawn(train, args=(world_size,), nprocs=world_size, join=True)  # type: ignore
-    except Exception as e:
-        print(f"Error in distributed training: {e}")
-        import traceback
-        traceback.print_exc()
+        try:
+            # set the multiprocessing start method
+            torch.multiprocessing.set_start_method('spawn', force=True)
+            
+            train(rank, local_rank, world_size) 
+        except Exception as e:
+            print(f"Error in distributed training: {e}")
+            import traceback
+            traceback.print_exc()
+            return 1
+    else:
+        print("Use torchrun to run this script") 
+        return 1  
+
+    return 0
 
 if __name__ == "__main__":
-    main()
+    exit(main())
