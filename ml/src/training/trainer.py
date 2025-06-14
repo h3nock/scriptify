@@ -302,13 +302,20 @@ class HandwritingTrainer:
                     break 
                 train_start = time.time()
                 train_loss , _ = self.train_step(batch) 
-                train_time = time.time() - train_start 
+                train_time = time.time() - train_start
+                
+                if self.world_size > 1:
+                    train_loss_tensor = torch.tensor([train_loss]).to(self.device)
+                    all_train_losses = [torch.zeros_like(train_loss_tensor) for _ in range(self.world_size)]
+                    torch.distributed.all_gather(all_train_losses, train_loss_tensor)
+                    global_train_loss = torch.mean(torch.stack(all_train_losses)).item()
+                else:
+                    global_train_loss = train_loss
 
-                epoch_train_losses.append(train_loss) 
-                train_loss_history.append(train_loss) 
+                epoch_train_losses.append(global_train_loss) 
+                train_loss_history.append(global_train_loss) 
 
                 if step % self.log_interval == 0 and self.rank == 0:
-                    #TODO: handle distributed cases properly  
                     avg_train_loss = sum(train_loss_history) / len(train_loss_history) 
                     val_loss_display = f"{latest_epoch_val_loss:.6f}" if not np.isnan(latest_epoch_val_loss) else "N/A"
 
@@ -320,7 +327,7 @@ class HandwritingTrainer:
                     )
                     if self.wandb_config.enabled and wandb.run:
                         wandb.log({
-                            "train/loss_step": train_loss,
+                            "train/loss_step": global_train_loss,
                             "train/loss_avg_hist": avg_train_loss,
                             "learning_rate": self.optimizer.param_groups[0]['lr'],
                             "epoch": epoch
