@@ -3,7 +3,6 @@ import yaml
 from pathlib import Path
 from typing import Union 
 from dotenv import load_dotenv
-from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import BaseModel, Field, ValidationInfo, field_validator
 
 # points to ml directory  
