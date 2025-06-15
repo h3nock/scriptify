@@ -84,6 +84,35 @@ def normalize(offsets):
         offsets[:,:2] /= median_norm 
     return offsets 
 
+def deskew_line(coords: np.ndarray) -> np.ndarray:
+    """
+    Rotate a full‑line (x,y,eos) array so that its main axis is straight horizontal line.
+    """
+    if coords.shape[0] < 2:
+        return coords.copy()
+
+    xy  = coords[:, :2].astype(np.float32)
+    ctr = xy.mean(axis=0, keepdims=True)         # line centroid
+    centered = xy - ctr
+
+    # prncipal component of the centered cloud
+    cov      = np.cov(centered.T)
+    _, vecs  = np.linalg.eigh(cov)
+    principal = vecs[:, 1]                       # largest eigen vector
+
+    # force it to point rightwards to avoid 180 degree flips
+    if principal[0] < 0:
+        principal = -principal
+
+    angle = np.arctan2(principal[1], principal[0])  # radians to horizontal
+
+    c, s = np.cos(-angle), np.sin(-angle)
+    R = np.array([[c, -s],
+                  [s,  c]], dtype=np.float32)
+
+    rotated = centered @ R.T + ctr                 # rotate about centroid
+    return np.concatenate([rotated, coords[:, 2:3]], axis=1)
+
 def has_outlier(offsets: np.ndarray, threshold: float) -> bool:
     """check if any consecutive points have eculidian distance > threshold"""
     deltas = offsets[1:,:2] - offsets[:-1,:2] 
