@@ -95,7 +95,7 @@ def deskew_line(coords: np.ndarray) -> np.ndarray:
     ctr = xy.mean(axis=0, keepdims=True)         # line centroid
     centered = xy - ctr
 
-    # prncipal component of the centered cloud
+    # principal component of the centered cloud
     cov      = np.cov(centered.T)
     _, vecs  = np.linalg.eigh(cov)
     principal = vecs[:, 1]                       # largest eigen vector
