@@ -359,7 +359,7 @@ class HandwritingTrainer:
 
                 if self.wandb_config.enabled and wandb.run:
                     log_dict = {
-                        "epoch/train_loss_gloabal_avg": global_avg_epoch_train_loss,
+                        "epoch/train_loss_global_avg": global_avg_epoch_train_loss,
                         "epoch/val_loss_global_avg": val_loss,
                         "epoch/num": epoch, 
                         "epoch/duration_sec": epoch_duration, 
