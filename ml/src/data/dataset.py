@@ -89,10 +89,6 @@ class OnlineHandwritingDataset:
 
                 offsets = normalize(offsets) # normalize offsets 
 
-                # filter based on offset magnitude 
-                offset_magnitudes = np.linalg.norm(offsets[:,:2], axis = 1)  
-                if np.any(offset_magnitudes > self.extreme_threshold):
-                    continue # skip this sample 
                 texts_per_line.append(text_lines[i])
                 strokes_per_line.append(offsets) 
                 writerIDs.append(writerID) 
