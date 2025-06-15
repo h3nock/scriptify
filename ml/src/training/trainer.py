@@ -196,9 +196,9 @@ class HandwritingTrainer:
             
             # average losses from all GPUs
             global_avg_loss = torch.mean(torch.stack(all_losses)).item()
-            return global_avg_loss
+            return global_avg_loss, local_avg_loss
         else:
-            return local_avg_loss 
+            return local_avg_loss, local_avg_loss 
       
     def save_checkpoint(self, epoch, step, val_loss):  
         """Save model checkpoint"""  
@@ -273,7 +273,6 @@ class HandwritingTrainer:
           
         # initialize training history  
         train_loss_history = deque(maxlen=100)  
-        latest_epoch_val_loss = float('nan') 
 
         # initialize best validation metrics  
         best_val_loss = float('inf')  
@@ -305,31 +304,23 @@ class HandwritingTrainer:
                 train_loss , _ = self.train_step(batch) 
                 train_time = time.time() - train_start
                 
-                if self.world_size > 1:
-                    train_loss_tensor = torch.tensor([train_loss]).to(self.device)
-                    all_train_losses = [torch.zeros_like(train_loss_tensor) for _ in range(self.world_size)]
-                    torch.distributed.all_gather(all_train_losses, train_loss_tensor)
-                    global_train_loss = torch.mean(torch.stack(all_train_losses)).item()
-                else:
-                    global_train_loss = train_loss
-
-                epoch_train_losses.append(global_train_loss) 
-                train_loss_history.append(global_train_loss) 
+                epoch_train_losses.append(train_loss)
+                if self.rank == 0: 
+                    train_loss_history.append(train_loss) 
 
                 if step % self.log_interval == 0 and self.rank == 0:
-                    avg_train_loss = sum(train_loss_history) / len(train_loss_history) 
-                    val_loss_display = f"{latest_epoch_val_loss:.6f}" if not np.isnan(latest_epoch_val_loss) else "N/A"
+                    avg_train_loss_rank0 = sum(train_loss_history) / len(train_loss_history) if train_loss_history else float('nan')
 
                     self.logger.info(
-                        f"Epoch {epoch}, Step {step}: "
-                        f"Train Loss: {avg_train_loss:.6f}, "
-                        f"Val Loss (Last Epoch): {val_loss_display}, "
-                        f"LR: {self.optimizer.param_groups[0]['lr']:.6f}"
+                        f"epoch {epoch}, step {step}: "
+                        f"train loss (rank 0 current step): {train_loss:.6f}"
+                        f"train loss (rank 0 recent avg): {avg_train_loss_rank0:.6f}, "
+                        f"lr: {self.optimizer.param_groups[0]['lr']:.6f}"
                     )
                     if self.wandb_config.enabled and wandb.run:
                         wandb.log({
-                            "train/loss_step": global_train_loss,
-                            "train/loss_avg_hist": avg_train_loss,
+                            "train/loss_step_rank0": train_loss, # current step 
+                            "train/loss_avg_hist_rank0": avg_train_loss_rank0, # avg local loss on rank 0 (considering the recent 100 or less steps)
                             "learning_rate": self.optimizer.param_groups[0]['lr'],
                             "epoch": epoch
                         }, step=step)
@@ -337,26 +328,47 @@ class HandwritingTrainer:
                 step += 1 
 
             val_start = time.time()
-            val_loss = self.validate()
+            val_loss, local_val_loss = self.validate() # global validation loss, current rank validation loss
             val_time = time.time() - val_start
 
-            latest_epoch_val_loss = val_loss  
             # log epoch summary
-            epoch_train_loss = sum(epoch_train_losses) / len(epoch_train_losses)
+            avg_local_epoch_train_loss = sum(epoch_train_losses) / len(epoch_train_losses) if epoch_train_losses else float('nan')
+            global_avg_epoch_train_loss = avg_local_epoch_train_loss 
+            if self.world_size > 1:
+                local_loss_tensor = torch.tensor([avg_local_epoch_train_loss], dtype=torch.float32, device=self.device)
+                
+                # avg across all processes
+                torch.distributed.all_reduce(local_loss_tensor, op=torch.distributed.reduceop.avg)
+                global_avg_epoch_train_loss = local_loss_tensor.item()
+
             epoch_duration = time.time() - epoch_start_time
             
             if self.rank == 0:
-                self.logger.info(
-                    f"Epoch {epoch} completed in {epoch_duration:.2f}s: "
-                    f"Train Loss: {epoch_train_loss:.6f}, "
-                    f"Val Loss: {val_loss:.6f}"
+                log_message_epoch = (
+                    f"epoch {epoch} completed in {epoch_duration:.2f}s: "
+                    f"train loss (global avg): {global_avg_epoch_train_loss:.6f}, "
+                    f"val loss (global avg): {val_loss:.6f}"
                 )
+                if self.world_size > 1:
+                    log_message_epoch += (
+                        f", train loss (rank 0 local avg): {avg_local_epoch_train_loss:.6f}"
+                        f", val loss (rank 0 local avg): {local_val_loss:.6f}" 
+                    )
+
+                self.logger.info(log_message_epoch)
+
                 if self.wandb_config.enabled and wandb.run:
-                    wandb.log({
-                        "epoch/train_loss_avg": epoch_train_loss,
-                        "epoch/val_loss": val_loss,
-                        "epoch/num": epoch
-                    }, step=step)
+                    log_dict = {
+                        "epoch/train_loss_gloabal_avg": global_avg_epoch_train_loss,
+                        "epoch/val_loss_global_avg": val_loss,
+                        "epoch/num": epoch, 
+                        "epoch/duration_sec": epoch_duration, 
+                        "epoch/val_time_sec": val_time 
+                    }
+                    if self.world_size > 1:
+                        log_dict["epoch/train_loss_rank0_avg"] = avg_local_epoch_train_loss 
+                        log_dict["epoch/val_loss_rank0_avg"] = local_val_loss
+                    wandb.log(log_dict, step=step)
             
             # check for new best model
             if val_loss < best_val_loss:
@@ -368,18 +380,18 @@ class HandwritingTrainer:
             if step - best_val_step > self.patience:
                 if self.restart_idx < len(self.batch_sizes) - 1:
                     # load best checkpoint 
-                    self.logger.info(f"Validation loss plateaued. Moving to next training phase.")
+                    self.logger.info(f"validation loss plateaued. moving to next training phase.")
                     self.load_checkpoint(best_val_step)
                     self.restart_idx += 1
                     self.update_train_params()
                     best_val_loss = float('inf')
                     best_val_step = step
                 else:
-                    self.logger.info(f"Early stopping at step {step}. Best validation loss: {best_val_loss:.6f} at step {best_val_step}")
+                    self.logger.info(f"early stopping at step {step}. best validation loss: {best_val_loss:.6f} at step {best_val_step}")
                     break
             
             # update learning rate 
-            if isinstance(self.scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
+            if isinstance(self.scheduler, torch.optim.lr_scheduler.reducelronplateau):
                 self.scheduler.step(val_loss)
             else:
                 self.scheduler.step()
