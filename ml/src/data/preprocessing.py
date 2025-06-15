@@ -1,4 +1,4 @@
-from typing import Callable, Literal
+from typing import Literal
 import numpy as np
 from scipy.signal import medfilt, savgol_filter
 
