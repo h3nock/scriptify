@@ -1,7 +1,7 @@
 import numpy as np 
 from pathlib import Path
 from src.data.loader import get_writerID, get_text_line_by_line, get_stroke_seqs, list_files 
-from src.data.preprocessing import normalize, stroke_coords_to_offsets
+from src.data.preprocessing import deskew_line, has_outlier, normalize, smooth_strokes, stroke_coords_to_offsets
 from config.config import Paths as PathsConfig, Dataset as DatasetParams
 from src.utils.text_utils import encode_text, get_alphabet_map, construct_alphabet_list
 class OnlineHandwritingDataset:
@@ -81,6 +81,9 @@ class OnlineHandwritingDataset:
 
             for i,stroke_file in enumerate(stroke_files):
                 strokes = get_stroke_seqs(stroke_file)
+                strokes = deskew_line(strokes) 
+                strokes = smooth_strokes(strokes=strokes)  
+                
                 offsets = stroke_coords_to_offsets(strokes)
                 offsets = offsets[:self.MAX_STROKE_LENGTH] 
 
