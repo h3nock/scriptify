@@ -338,7 +338,7 @@ class HandwritingTrainer:
                 local_loss_tensor = torch.tensor([avg_local_epoch_train_loss], dtype=torch.float32, device=self.device)
                 
                 # avg across all processes
-                torch.distributed.all_reduce(local_loss_tensor, op=torch.distributed.reduceop.avg)
+                torch.distributed.all_reduce(local_loss_tensor, op=torch.distributed.ReduceOp.AVG)
                 global_avg_epoch_train_loss = local_loss_tensor.item()
 
             epoch_duration = time.time() - epoch_start_time
@@ -391,7 +391,7 @@ class HandwritingTrainer:
                     break
             
             # update learning rate 
-            if isinstance(self.scheduler, torch.optim.lr_scheduler.reducelronplateau):
+            if isinstance(self.scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
                 self.scheduler.step(val_loss)
             else:
                 self.scheduler.step()
