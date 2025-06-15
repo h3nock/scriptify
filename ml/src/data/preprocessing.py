@@ -114,7 +114,7 @@ def deskew_line(coords: np.ndarray) -> np.ndarray:
     return np.concatenate([rotated, coords[:, 2:3]], axis=1)
 
 def has_outlier(offsets: np.ndarray, threshold: float) -> bool:
-    """check if any consecutive points have eculidian distance > threshold"""
+    """check if any consecutive points have Euclidean distance > threshold"""
     deltas = offsets[1:,:2] - offsets[:-1,:2] 
     mags = np.linalg.norm(deltas, axis=1)
 
