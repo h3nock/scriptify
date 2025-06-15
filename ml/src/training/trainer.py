@@ -70,6 +70,7 @@ class HandwritingTrainer:
         """Update training parameters for current phase"""  
         self.batch_size = self.batch_sizes[self.restart_idx]
         self.learning_rate = self.learning_rates[self.restart_idx]
+        self.learning_rate *= np.sqrt(self.world_size) 
         self.beta1_decay = self.beta1_decays[self.restart_idx]
         self.patience = self.patiences[self.restart_idx]
         
