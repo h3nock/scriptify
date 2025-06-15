@@ -313,7 +313,7 @@ class HandwritingTrainer:
 
                     self.logger.info(
                         f"epoch {epoch}, step {step}: "
-                        f"train loss (rank 0 current step): {train_loss:.6f}"
+                        f"train loss (rank 0 current step): {train_loss:.6f} "
                         f"train loss (rank 0 recent avg): {avg_train_loss_rank0:.6f}, "
                         f"lr: {self.optimizer.param_groups[0]['lr']:.6f}"
                     )
