@@ -82,7 +82,7 @@ def normalize(offsets):
     median_norm = np.median(norms)
     if median_norm > esp:
         offsets[:,:2] /= median_norm 
-    return offsets 
+    return offsets
 
 def deskew_line(coords: np.ndarray) -> np.ndarray:
     """
@@ -120,34 +120,44 @@ def has_outlier(offsets: np.ndarray, threshold: float) -> bool:
 
     return bool(np.any(mags > threshold)) 
 
-def _median_smoother(offsets: np.ndarray,*, kernel_size: int, **_) -> np.ndarray:
-    xs = medfilt(offsets[:,0], kernel_size=kernel_size) 
-    ys = medfilt(offsets[:, 1], kernel_size=kernel_size) 
-    return np.stack([xs, ys, offsets[:,2]], axis=1)
-
-def _savgol_smoother(offsets: np.ndarray, *, window_length: int, 
-                     polyorder: int, **_) -> np.ndarray:
-    xs = savgol_filter(offsets[:,0],window_length, polyorder) 
-    ys = savgol_filter(offsets[:, 1],window_length, polyorder) 
-    return np.stack([xs, ys, offsets[:,2]], axis=1) 
-
-def smooth_offsets(offsets: np.ndarray, method: SmoothMethod = 'median',*,
-                   kernel_size: int = 5, window_length: int = 7, 
+def smooth_strokes(strokes: np.ndarray, method: SmoothMethod = 'savgol',*,
+                   kernel_size: int = 5, window_length: int = 5, 
                    polyorder: int = 2) -> np.ndarray:
     """
     Smoothes stroke offset. 
     - method: 'median' or 'savgol' 
-    - kernel_size: used for median only 
-    - window_length & polyorder: used for savgol only 
-    """ 
-    if  method not in _SMOOTHERS:
-        raise ValueError(f"Unsupported smoothing method: {method}. Choose from: {_SMOOTHERS}")
-    func = _SMOOTHERS[method] 
+    - window_length: is kernel_size for median and window_length for savgol 
+    - polyorder: polynomial order for savgol 
+    """
+    if method == 'savgol' and window_length % 2 == 0:
+        window_length += 1
 
-    return func(offsets, kernel_size=kernel_size, window_length = window_length,
-                polyorder = polyorder)
+    # split at pen‑ups (eos==1)
+    cuts = np.where(strokes[:, 2] == 1)[0] + 1
+    segments = np.split(strokes, cuts)
 
-_SMOOTHERS: dict[SmoothMethod, Callable] = {
-    'median': _median_smoother, 
-    'savgol': _savgol_smoother
-}
+    out_segments = []
+    for seg in segments:
+        if seg.size == 0:
+            continue
+        x, y = seg[:, 0].copy(), seg[:, 1].copy()
+
+        if method == 'median':
+            k = min(window_length, len(x))
+            if k % 2 == 0:
+                k -= 1
+            x_s = medfilt(x, kernel_size=k)
+            y_s = medfilt(y, kernel_size=k)
+        else:  # savgol
+            if len(x) < window_length:
+                x_s, y_s = x, y
+            else:
+                x_s = savgol_filter(x, window_length, polyorder, mode='interp')
+                y_s = savgol_filter(y, window_length, polyorder, mode='interp')
+
+        seg[:, 0] = x_s
+        seg[:, 1] = y_s
+        out_segments.append(seg)
+
+    # re‑concatenate all stroke segments
+    return np.vstack(out_segments) 
