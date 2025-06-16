@@ -11,40 +11,6 @@ from src.utils.stroke_viz import plot_offset_strokes
 from config.config import load_config 
 
     
-def load_model_for_prediction(checkpoint_path: Union[str, Path],config, device):
-    """Loads a trained model from a checkpoint."""
-    checkpoint_path = Path(checkpoint_path)
-    if not os.path.exists(checkpoint_path):
-        raise FileNotFoundError(f"Checkpoint not found at {checkpoint_path}")
-
-    checkpoint = torch.load(checkpoint_path, map_location=device)
-    
-    model_params  = config.model_params 
-    alphabet = construct_alphabet_list(config.dataset.alphabet_string) 
-    alphabet_size = len(alphabet) 
-    char_map = get_alphabet_map(alphabet_list=alphabet)
-    
-    model = HandwritingRNN(
-        lstm_size=model_params.lstm_size,
-        output_mixture_components=model_params.output_mixture_components, 
-        attention_mixture_components=model_params.attention_mixture_components,
-        alphabet_size=alphabet_size
-    )
-    
-    state_dict = checkpoint['model_state_dict']
-    new_state_dict = {}
-    for k, v in state_dict.items():
-        if k.startswith('module.'):
-            new_state_dict[k[7:]] = v 
-        else:
-            new_state_dict[k] = v
-    
-    model.load_state_dict(new_state_dict)
-    model.to(device)
-    model.eval()
-    print(f"Model loaded from {checkpoint_path}")
-    return model, char_map  
-
 # def encode_text(text, alphabet, device):
 #     """Encodes text into a tensor of character indices."""
 #     char_to_idx = {c: i for i, c in enumerate(alphabet)}
@@ -142,7 +108,7 @@ def main():
                 run_paths.create_directories()
             
             max_text_len_for_encoding = run_config.dataset.max_text_len 
-            model, char_map = load_model_for_prediction(checkpoint_path,run_config, device)
+            model, char_map = HandwritingRNN.load_from_checkpoint(checkpoint_path,run_config, device)
 
             generated_strokes = predict_handwriting(
                 model, 
