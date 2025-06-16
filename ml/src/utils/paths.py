@@ -69,44 +69,42 @@ class RunPaths:
     def find_latest_run(cls, base_outputs_dir: Union[str, Path] = "outputs") -> Optional['RunPaths']:
         
         latest_run_dir = find_latest_run_dir(base_outputs_dir) 
-        if latest_run_dir is None:
-            return None 
+        
         return cls(run_name=latest_run_dir.name, base_outputs_dir=base_outputs_dir) 
 
-def find_latest_run_dir(base_outputs_dir: Union[str, Path] = "outputs") -> Optional['Path']: 
+def find_latest_run_dir(base_outputs_dir: Union[str, Path] = "outputs") -> Path: 
     """Find the latest run directory in the outputs folder."""
     outputs_path = Path(base_outputs_dir) 
     if not outputs_path.exists():
-        print(f"Error: Outputs directory '{base_outputs_dir}' not found.") 
-        return None 
+        raise FileNotFoundError(f"Error: Outputs directory '{base_outputs_dir}' not found.") 
     
     run_dirs = list(outputs_path.glob("run_*")) 
 
     if not run_dirs:
-        print(f"Error: No run directories found in '{base_outputs_dir}'")
-        return None 
+        raise FileNotFoundError(f"Error: No run directories found in '{base_outputs_dir}'")
     
     run_dirs.sort(key=lambda x : x.stat().st_mtime, reverse=True) 
     latest_run = run_dirs[0] 
     
     return latest_run
 
-def find_latest_checkpoint(checkpoints_dir: Union[str, Path]) -> Optional[Path]:
+def find_latest_checkpoint(checkpoints_dir: Union[str, Path]) -> Path:
     """Find the latest checkpoint in `checkpoints_dir` directory"""
     checkpoints_path = Path(checkpoints_dir) 
     if not checkpoints_path.exists():
-        return None 
+        raise FileNotFoundError(f"The directory {checkpoints_path} doesn't exist") 
     checkpoint_files = list(checkpoints_path.glob('model-*'))
+
     if not checkpoint_files:
-        return None 
+        raise FileNotFoundError(f"No checkpoint file is found inside the directory: ${checkpoints_path}") 
+
     checkpoint_files.sort(key=lambda x: x.stat().st_mtime, reverse=True) 
     return checkpoint_files[0] 
 
-def find_latest_run_checkpoint(base_outputs_dir: Union[str,Path] = "outputs") -> Optional[Path]:
+def find_latest_run_checkpoint(base_outputs_dir: Union[str,Path] = "outputs") -> Path:
     """Find the latest checkpoint from the latest run."""
-    latest_run = find_latest_run_dir(base_outputs_dir=base_outputs_dir) 
 
-    if latest_run is None:
-        return None 
+    latest_run = find_latest_run_dir(base_outputs_dir=base_outputs_dir) 
     checkpoints_dir = latest_run / "checkpoints" 
+
     return find_latest_checkpoint(checkpoints_dir)
