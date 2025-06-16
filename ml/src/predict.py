@@ -10,14 +10,6 @@ from src.utils.paths import RunPaths, find_latest_run_checkpoint
 from src.utils.stroke_viz import plot_offset_strokes 
 from config.config import load_config 
 
-    
-# def encode_text(text, alphabet, device):
-#     """Encodes text into a tensor of character indices."""
-#     char_to_idx = {c: i for i, c in enumerate(alphabet)}
-#     idxs = [char_to_idx.get(c, 0) for c in text] + [0]      
-#     c   = torch.tensor([idxs], dtype=torch.long, device=device)  
-#     c_len  = torch.tensor([len(idxs)], dtype=torch.long, device=device)
-#     return c, c_len 
 
 def predict_handwriting(model: HandwritingRNN, text_to_generate: str, char_map: Dict[str, int], device, max_text_length: int, max_stroke_length=1200, bias=0.75, prime: Optional[int] = None):
     """Generates handwriting for the given text."""
