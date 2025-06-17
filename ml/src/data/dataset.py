@@ -49,6 +49,7 @@ class OnlineHandwritingDataset:
         all_lines_text = []
         all_lines_strokes_offsets = [] 
         all_lines_writer_ids = [] 
+        all_original_stroke_names = []
         
         if not self.source_docs:
             raise FileNotFoundError("No source documents to load samples from")
@@ -76,6 +77,8 @@ class OnlineHandwritingDataset:
                     all_lines_text.append(line_text) 
                     all_lines_strokes_offsets.append(offsets) 
                     all_lines_writer_ids.append(writerID)
+                    all_original_stroke_names.append(stroke_file_path.name) 
+
                 except FileNotFoundError:
                     print(f"Stroke file {stroke_file_path} not found, so skipping it.") 
                     continue 
@@ -114,6 +117,7 @@ class OnlineHandwritingDataset:
             'chars': char_sequences,
             'chars_len': char_lengths,
             'writer_ids': np.array(all_lines_writer_ids, dtype=np.int16),
+            'original_stroke_filenames': all_original_stroke_names
         }
 
         return processed_data
@@ -140,4 +144,12 @@ if __name__ == "__main__":
     np.save(processed_dir/ "chars_len.npy", data['chars_len'])
     np.save(processed_dir/ "writer_ids.npy", data['writer_ids'])
 
+    # save the original stroke filenames to a text file
+    original_filenames_list = data['original_stroke_filenames']
+    filenames_output_path = processed_dir / "original_stroke_filenames.txt"
+    with open(filenames_output_path, 'w') as f:
+        for filename in original_filenames_list:
+            f.write(f"{filename}\n")
+
     print("Processed data saved successfully.")
+
