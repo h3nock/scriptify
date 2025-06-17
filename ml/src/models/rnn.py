@@ -1,10 +1,13 @@
-from typing import NamedTuple, Optional
+from pathlib import Path
+from typing import NamedTuple, Optional, Union
 import torch  
 import numpy as np
 import torch.nn as nn  
 # Removed unused import
 import torch.nn.functional as F
 
+from config.config import Config
+from src.utils.text_utils import construct_alphabet_list, get_alphabet_map
 from src.data.dataloader import ProcessedHandwritingDataset  
 from .attention import AttentionMechanism  
 from .gmm import GMMLayer  
@@ -47,6 +50,46 @@ class HandwritingRNN(nn.Module):
           
         self.gmm = GMMLayer(3 * self.lstm_size, self.output_mixture_components)  
 
+    @classmethod 
+    def load_from_checkpoint(cls, 
+                             checkpoint_path: Union[str, Path], 
+                             config: Config, 
+                             device: torch.device
+                             ):
+        checkpoint_path = Path(checkpoint_path) 
+        if  not checkpoint_path.exists(): 
+            raise FileNotFoundError(f"Checkpoint not found at {checkpoint_path}")
+        checkpoint = torch.load(checkpoint_path, map_location=device) 
+
+        model_params = config.model_params 
+        dataset_params = config.dataset 
+        
+        alphabet = construct_alphabet_list(dataset_params.alphabet_string) 
+        alphabet_size = len(alphabet)
+        char_map = get_alphabet_map(alphabet_list=alphabet) 
+
+        model = cls(
+            lstm_size = model_params.lstm_size, 
+            output_mixture_components = model_params.output_mixture_components, 
+            attention_mixture_components = model_params.attention_mixture_components, 
+            alphabet_size = alphabet_size, 
+            dropout_prob = model_params.dropout_prob 
+        )
+       
+        state_dict = checkpoint['model_state_dict'] 
+        new_state_dict = {}
+        for k,v in state_dict.items(): 
+            if k.startswith('module.'):
+                new_state_dict[k[7:]] = v 
+            else:
+                new_state_dict[k] = v 
+        
+        model.load_state_dict(new_state_dict) 
+        model.to(device) 
+        model.eval() 
+        
+        return model, char_map 
+        
     def one_hot_encode(self, char_seq):
         return F.one_hot(char_seq, num_classes=self.alphabet_size,).float() 
           

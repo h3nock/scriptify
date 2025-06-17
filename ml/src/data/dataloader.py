@@ -11,6 +11,23 @@ class ProcessedHandwritingDataset(Dataset):
         self.chars = np.load(processed_dir / "chars.npy")
         self.chars_len = np.load(processed_dir / "chars_len.npy")
         self.writer_ids = np.load(processed_dir / "writer_ids.npy")
+
+        # load stroke filenames 
+        self.stroke_filenames = []
+        filenames_path = processed_dir / "original_stroke_filenames.txt"
+        
+        if filenames_path.exists():
+            with open(filenames_path, 'r') as f:
+                self.stroke_filenames = [line.strip() for line in f if line.strip()]
+
+            if len(self.stroke_filenames) != len(self.strokes):
+                raise ValueError(
+                    f"Mismatch between number of strokes ({len(self.strokes)}) and "
+                    f"number of original filenames ({len(self.stroke_filenames)}). "
+                )
+        else:
+            raise FileNotFoundError(f"Stroke filenames doesn't exist at {filenames_path}")
+
         print(f"Loaded {self.strokes.shape[0]} samples.")
 
     @staticmethod
@@ -34,6 +51,7 @@ class ProcessedHandwritingDataset(Dataset):
             'chars': torch.tensor(self.chars[idx], dtype=torch.long),
             'chars_len': torch.tensor(self.chars_len[idx], dtype = torch.int), 
             'writer_id': torch.tensor(self.writer_ids[idx], dtype= torch.int), 
+            'stroke_filename': self.stroke_filenames[idx] 
         }
 
 if __name__ == '__main__':

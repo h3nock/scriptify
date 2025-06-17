@@ -1,3 +1,4 @@
+from csv import Error
 import os
 from typing import Dict, Optional, Union
 import torch
@@ -6,52 +7,10 @@ import numpy as np
 from pathlib import Path
 from src.utils.text_utils import construct_alphabet_list, encode_text, get_alphabet_map, load_np_strokes, load_priming_data, load_text
 from src.models.rnn import HandwritingRNN, PrimingData
-from src.utils.paths import RunPaths, find_latest_run_checkpoint
+from src.utils.paths import RunPaths, find_latest_checkpoint, find_latest_run_checkpoint, find_latest_run_dir
 from src.utils.stroke_viz import plot_offset_strokes 
 from config.config import load_config 
 
-    
-def load_model_for_prediction(checkpoint_path: Union[str, Path],config, device):
-    """Loads a trained model from a checkpoint."""
-    checkpoint_path = Path(checkpoint_path)
-    if not os.path.exists(checkpoint_path):
-        raise FileNotFoundError(f"Checkpoint not found at {checkpoint_path}")
-
-    checkpoint = torch.load(checkpoint_path, map_location=device)
-    
-    model_params  = config.model_params 
-    alphabet = construct_alphabet_list(config.dataset.alphabet_string) 
-    alphabet_size = len(alphabet) 
-    char_map = get_alphabet_map(alphabet_list=alphabet)
-    
-    model = HandwritingRNN(
-        lstm_size=model_params.lstm_size,
-        output_mixture_components=model_params.output_mixture_components, 
-        attention_mixture_components=model_params.attention_mixture_components,
-        alphabet_size=alphabet_size
-    )
-    
-    state_dict = checkpoint['model_state_dict']
-    new_state_dict = {}
-    for k, v in state_dict.items():
-        if k.startswith('module.'):
-            new_state_dict[k[7:]] = v 
-        else:
-            new_state_dict[k] = v
-    
-    model.load_state_dict(new_state_dict)
-    model.to(device)
-    model.eval()
-    print(f"Model loaded from {checkpoint_path}")
-    return model, char_map  
-
-# def encode_text(text, alphabet, device):
-#     """Encodes text into a tensor of character indices."""
-#     char_to_idx = {c: i for i, c in enumerate(alphabet)}
-#     idxs = [char_to_idx.get(c, 0) for c in text] + [0]      
-#     c   = torch.tensor([idxs], dtype=torch.long, device=device)  
-#     c_len  = torch.tensor([len(idxs)], dtype=torch.long, device=device)
-#     return c, c_len 
 
 def predict_handwriting(model: HandwritingRNN, text_to_generate: str, char_map: Dict[str, int], device, max_text_length: int, max_stroke_length=1200, bias=0.75, prime: Optional[int] = None):
     """Generates handwriting for the given text."""
@@ -95,7 +54,8 @@ def validate_bias(value: float):
 
 def main():
     parser = argparse.ArgumentParser(description="Generate handwriting from text using a trained model.")
-    parser.add_argument("--checkpoint", type=str, default=None, help="Path to the model checkpoint file (eg., .../checkpoints/model-XXXX).")
+    parser.add_argument("--run", type=str, default=None, help="Path to the specific run folder pointing to the run to use for the prediction. The run folder should have `checkpoints/` and `config/` folder. By default the latest run folder is used.")
+    parser.add_argument("--checkpoint", type=int, default=None, help="The specific checkpoint (model) number to use from the `checkpoints/` folder. By default the latest model is used.")
     parser.add_argument("--text", type=str, required=True, help="Text to generate handwriting for.")
     parser.add_argument("--max_length", type=int, default=1200, help="Maximum length of the generated stroke sequence.")
     parser.add_argument("--bias", type=float, default=1, help="Sampling bias (temperature). Lower values make it more deterministic.")
@@ -112,54 +72,67 @@ def main():
         print("Using CPU for prediction.")
 
     try:
-        checkpoint_path = None
-        if args.checkpoint is None:
-            checkpoint_path = find_latest_run_checkpoint()
+        run_path = None 
+        if args.run is None:
+            run_path = find_latest_run_dir() 
         else:
-            checkpoint_path = Path(args.checkpoint) 
+            run_path = Path(args.run) 
         
-        if checkpoint_path: 
-            run_config = None 
-            run_paths = None 
-            
-            try:
-                run_name = checkpoint_path.parent.parent.name 
-                base_outputs_dir = checkpoint_path.parent.parent.parent
-                run_paths = RunPaths(run_name=run_name, base_outputs_dir=base_outputs_dir)
-                if run_paths.run_dir.exists() and run_paths.config_copy.exists():
-                    run_config = load_config(run_paths.config_copy) 
-                else:
-                    run_config = load_config() 
-                    if not run_paths.run_dir.exists():
-                        run_paths = None 
-            except IndexError:
-                run_config = load_config()
-                run_paths = None 
-            
-            if run_paths is None:
-                run_config = load_config()
-                run_paths = RunPaths(run_name=f"predict_{checkpoint_path.stem}", base_outputs_dir=run_config.paths.outputs_dir)
-                run_paths.create_directories()
-            
-            max_text_len_for_encoding = run_config.dataset.max_text_len 
-            model, char_map = load_model_for_prediction(checkpoint_path,run_config, device)
+        if run_path is None:
+            raise FileNotFoundError(f"Run directory is not found at {run_path}")
+        elif not run_path.is_dir():
+            raise NotADirectoryError(f"Run path is not directory: {run_path}") 
+        
+        checkpoints_subdir = run_path / "checkpoints"
+        config_subdir = run_path / "config"
 
-            generated_strokes = predict_handwriting(
-                model, 
-                args.text, 
-                char_map, 
-                device, 
-                max_text_length=max_text_len_for_encoding,
-                max_stroke_length=args.max_length, 
-                bias=args.bias, 
-                prime=args.style
-            )
+        if not checkpoints_subdir.is_dir():
+            raise FileNotFoundError(f"Requreid 'checkpoints' subdirectory not find in run directory:{run_path} or not a directory. ")
+
+        if not config_subdir.is_dir():
+            raise FileNotFoundError(f"Requreid 'config' subdirectory not find in run directory:{run_path} or not a directory. ")
+
+        checkpoint_path = None 
+        if args.checkpoint is None:
+            checkpoint_path = find_latest_checkpoint(checkpoints_subdir ) 
+        else:
+            checkpoint = checkpoints_subdir / f"model-{args.checkpoint}" 
+        
+        if checkpoint_path is None or (not checkpoint_path.exists()):
+            raise FileNotFoundError(f"Checkpoint is not found at {checkpoint_path}")
+        elif checkpoint_path.is_dir(): 
+            raise FileNotFoundError(f"Checkpoint file expected but provided directory path: {checkpoint_path}")
+        
+        try: 
+            run_name = run_path.name 
+            base_outputs_dir = run_path.parent 
+            run_paths = RunPaths(run_name=run_name, base_outputs_dir=base_outputs_dir)
+
+            if not run_paths.config_copy.exists(): 
+                raise FileNotFoundError(f"Config file not found at {run_paths.config_copy}")
+            run_config = load_config(config_path=run_paths.config_copy) 
             
-            if generated_strokes.size > 0:
-                print(f"Generated Strokes Shape: {generated_strokes.shape}")
-                plot_offset_strokes(generated_strokes,run_paths.get_sample_plot_path(text=args.text), plot_only_text=True)
-    
-             
+        except Exception as e:
+            raise Error(f"Unexpected error occured while preparing checkpoint and config files: {e}") 
+        
+        max_text_len_for_encoding = run_config.dataset.max_text_len 
+        model, char_map = HandwritingRNN.load_from_checkpoint(checkpoint_path,run_config, device)
+
+        generated_strokes = predict_handwriting(
+            model, 
+            args.text, 
+            char_map, 
+            device, 
+            max_text_length=max_text_len_for_encoding,
+            max_stroke_length=args.max_length, 
+            bias=args.bias, 
+            prime=args.style
+        )
+        
+        if generated_strokes.size > 0:
+            print(f"Generated Strokes Shape: {generated_strokes.shape}")
+            plot_offset_strokes(generated_strokes,run_paths.get_sample_plot_path(text=args.text), plot_only_text=True)
+
     except FileNotFoundError as e:
         print(f"Error: {e}")
     except Exception as e:
