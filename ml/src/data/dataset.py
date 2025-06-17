@@ -1,3 +1,4 @@
+from typing import Optional, Union
 import numpy as np 
 from pathlib import Path
 from src.data.raw_data_reader import SourceDocumentInfo, collect_and_organize_docs, get_stroke_seqs
@@ -12,7 +13,7 @@ class OnlineHandwritingDataset:
     its associated stroke data obtained from lineStrokes folder. 
     """
 
-    def __init__(self, paths_config: PathsConfig, dataset_params: DatasetParams):
+    def __init__(self, paths_config: PathsConfig, dataset_params: DatasetParams, ignore_list_file_path: Optional[Union[str, Path]] = None):
         """
         Params: 
             ascii_root: Dirctory containing text files. 
@@ -36,6 +37,17 @@ class OnlineHandwritingDataset:
 
         self.char_to_index = get_alphabet_map(self.ALPHABET)
         self.ALPHABET_SIZE = len(self.ALPHABET)
+
+        self.ignored_stroke_filenames = set() 
+        if ignore_list_file_path:
+            ignore_list_file_path = Path(ignore_list_file_path) 
+            if ignore_list_file_path.exists():
+                with open(ignore_list_file_path, 'r') as f:
+                    self.ignored_stroke_filenames = {line.strip() for line in f if line.strip()} 
+                print(f"Ignore list file loaded!")
+        else:
+            print(f"Ingore list file not found at: {ignore_list_file_path}")
+        
     
     def _load_samples(self):
         """
@@ -60,6 +72,8 @@ class OnlineHandwritingDataset:
             for i, line_text in enumerate(doc_info.text_lines):
                 stroke_file_path = doc_info.line_stroke_file_paths[i] 
                 
+                if stroke_file_path.name in self.ignored_stroke_filenames:
+                    continue 
                 try:
                     strokes = get_stroke_seqs(stroke_file_path) 
                     if len(strokes)== 0:
@@ -127,16 +141,18 @@ if __name__ == "__main__":
     from config.config import load_config 
     config = load_config() 
 
-    dataset = OnlineHandwritingDataset(paths_config=config.paths, dataset_params=config.dataset)
+    processed_dir = config.paths.processed_data_dir
+    if not processed_dir.exists():
+        processed_dir.mkdir(parents=True,exist_ok=True)
+
+    dataset = OnlineHandwritingDataset(paths_config=config.paths, dataset_params=config.dataset, ignore_list_file_path=processed_dir / "bad_files.txt")
+
     data = dataset._load_samples()
     
     print(f"ALPHABET_SIZE: {dataset.ALPHABET_SIZE}")
     print(f"MAX_TEXT_LENGTH: {dataset.MAX_TEXT_LENGTH}")
     print(f"MAX_STROKE_LENGTH: {dataset.MAX_STROKE_LENGTH}")
 
-    processed_dir = config.paths.processed_data_dir
-    if not processed_dir.exists():
-        processed_dir.mkdir(parents=True,exist_ok=True)
     
     np.save(processed_dir/ "strokes.npy", data['strokes'])
     np.save(processed_dir/ "strokes_len.npy", data['strokes_len'])
@@ -151,5 +167,5 @@ if __name__ == "__main__":
         for filename in original_filenames_list:
             f.write(f"{filename}\n")
 
-    print("Processed data saved successfully.")
+    print(f"{len(data['strokes'])} processed data saved successfully.")
 
