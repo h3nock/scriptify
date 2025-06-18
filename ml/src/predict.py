@@ -37,12 +37,14 @@ def predict_handwriting(model: HandwritingRNN, text_to_generate: str, char_map: 
         primingData = PrimingData(priming_stroke_tensor, char_seq_tensors=encoded_priming_text_tensor, char_seq_lengths=priming_text_len_tensor)
 
     with torch.no_grad():
+        # strokes: (batch_size, max_generated_length, 3)
         strokes = model.sample(c, c_len, max_length=max_stroke_length, bias=bias, prime=primingData)
 
     if strokes:
-        # just take the first sample (since we aren't doing batch prediction)
-        strokes = [stroke.squeeze(0).cpu().numpy() for stroke in strokes]
-        return np.array(strokes)
+        # just take the first sample (since we aren't doing batch prediction here)
+        # take the first sample and convert it to numpy  
+        strokes = strokes[0].cpu().numpy() 
+        return strokes 
     print("Warrning: model.sample returned no strokes") 
     return np.array([]) 
 
