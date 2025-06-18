@@ -196,8 +196,8 @@ class HandwritingRNN(nn.Module):
     @torch.jit.export  
     def sample(self, char_seq: torch.Tensor, char_seq_lengths: torch.Tensor,
                max_length: int = 1000, bias: float = 0.5,
-               prime: Optional[PrimingData] = None) -> list[torch.Tensor]:  
-
+               prime: Optional[PrimingData] = None) -> tuple[torch.Tensor, torch.Tensor]:  
+        print(f"Shape of char_seq: {char_seq.size()}")
         batch_size = char_seq.size(0)  
         device = char_seq.device  
         
@@ -283,7 +283,11 @@ class HandwritingRNN(nn.Module):
         else:
              bias_tensor = torch.tensor([0.5] * batch_size, device=device, dtype=torch.float32)
         
-        last_actual_char_idx = max(0, int(char_seq_lengths.item()) - 1) 
+        last_actual_char_idx = max(0, int(char_seq_lengths.item()) - 1)
+        attention_has_reached_end = torch.zeros(batch_size, dtype=torch.bool, device=device)
+        finished_mask = torch.zeros(batch_size, dtype=torch.bool, device=device)
+        output_lengths = torch.full((batch_size,),-1, dtype=torch.long, device=device)
+
         for t in range(max_length):  
             # LSTM 1  
             lstm1_input = torch.cat([window, x], dim=1)  
@@ -312,21 +316,23 @@ class HandwritingRNN(nn.Module):
               
             # update input for next step  
             x = stroke  
-            
-            # early stopping criteria 
-            pen_up   = (stroke[:, 2] > 0.5).all()
-            tiny_mv  = (stroke[:, :2].abs().max() < 0.02).all()
-            if pen_up and tiny_mv:
-                pen_up_ctr += 1
-            else:
-                pen_up_ctr = 0
+            attention_peak_indices = torch.argmax(phi, dim=1) 
+            is_attention_on_end = (attention_peak_indices == last_actual_char_idx) 
+            attention_has_reached_end = attention_has_reached_end | is_attention_on_end 
+            pen_is_up = stroke[:,2] >= 0.5
+             
+            newly_finished = attention_has_reached_end & pen_is_up 
+            first_time_finished = newly_finished & (output_lengths == -1) 
+            output_lengths[first_time_finished] = t + 1
 
-            if (phi[:, last_actual_char_idx] > 0.98).all():
-                done_ctr += 1
-            else:
-                done_ctr = 0
+            finished_mask = finished_mask | newly_finished 
 
-            if pen_up_ctr >= 12 or done_ctr >= 15:
+            if finished_mask.all():
                 break
 
-        return strokes        
+        all_strokes = torch.stack(strokes, dim=1) 
+        # for any samples that never finished, their length is the max generated len 
+        max_generated_len = all_strokes.size(1) 
+        output_lengths[output_lengths == -1] = max_generated_len 
+        
+        return all_strokes, output_lengths  
