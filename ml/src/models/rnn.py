@@ -283,7 +283,7 @@ class HandwritingRNN(nn.Module):
         else:
              bias_tensor = torch.tensor([0.5] * batch_size, device=device, dtype=torch.float32)
         
-        last_actual_char_idx = max(0, int(char_seq_lengths.item()) - 1)
+        last_actual_char_idx = char_seq_lengths - 1
         attention_has_reached_end = torch.zeros(batch_size, dtype=torch.bool, device=device)
         finished_mask = torch.zeros(batch_size, dtype=torch.bool, device=device)
         output_lengths = torch.full((batch_size,),-1, dtype=torch.long, device=device)
