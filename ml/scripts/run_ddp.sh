@@ -1,13 +1,22 @@
 #!/usr/bin/env bash
 
-NODE_RANK=${1:-}
+NODE_RANK=${1} 
+RUN_NAME=${2}
+RUN_NAME_ARG=""
+
 if [ -z "$NODE_RANK" ]; then
     echo "Usage: $0 <node_rank>"
+    echo "Example: $0 0"
     exit 1
 fi
 
+if [ -n "$RUN_NAME" ]; then
+    echo "Using run name: $RUN_NAME" 
+    RUN_NAME_ARG="--run_name $RUN_NAME"
+fi
+    
 echo "Starting multi-node distributed training..."
-echo "Node rank: $NODE_RANK"
+echo "Node rank: $NODE_RANK, Run name: $RUN_NAME"
 
 # cd to ml directory
 cd "$(dirname "$0")/.."
@@ -46,6 +55,6 @@ torchrun \
     --master_port=$MASTER_PORT \
     --rdzv_backend=c10d \
     --rdzv_endpoint="$MASTER_ADDR:$MASTER_PORT" \
-    -m src.train
+    -m src.train $RUN_NAME_ARG 
 
 echo "Training finished with exit code $?"

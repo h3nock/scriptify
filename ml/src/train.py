@@ -1,7 +1,8 @@
 import os
 from typing import Optional, Union
 import torch
-import wandb 
+import wandb
+import argparse  
 from datetime import datetime 
 import torch.multiprocessing as mp
 from torch.nn.parallel import DistributedDataParallel as DDP
@@ -29,7 +30,7 @@ def cleanup():
     if dist.is_initialized():
         dist.destroy_process_group()
 
-def train(rank,local_rank, world_size):
+def train(rank,local_rank, world_size, run_name: Optional[str] = None):
     """Training function to run on each GPU"""
     if world_size > 1:
         # setup process group
@@ -53,8 +54,11 @@ def train(rank,local_rank, world_size):
     
     run_name_container: list[Union[str,None]] = [None]
     if rank == 0:
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S") 
-        run_name_container[0] = f"run_{timestamp}"
+        if run_name:
+            run_name_container[0] = run_name  
+        else:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S") 
+            run_name_container[0] = f"run_{timestamp}"
 
     if world_size > 1:
         dist.broadcast_object_list(run_name_container,0)
@@ -88,6 +92,7 @@ def train(rank,local_rank, world_size):
                 config=hyperparams, 
                 tags=config_global.wandb.tags, 
                 notes=config_global.wandb.notes,
+                id=run_paths.run_name,
                 resume="allow"
             )
             
@@ -141,6 +146,10 @@ def train(rank,local_rank, world_size):
         cleanup()
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--run_name", type=str, default=None,help="A unique name for training run name")
+    args, _ = parser.parse_known_args()
+
     if not torch.cuda.is_available():
         print("CUDA is not available. Running on CPU.")
         return 1
@@ -155,7 +164,7 @@ def main():
             # set the multiprocessing start method
             torch.multiprocessing.set_start_method('spawn', force=True)
             
-            train(rank, local_rank, world_size) 
+            train(rank, local_rank, world_size, args.run_name) 
         except Exception as e:
             print(f"Error in distributed training: {e}")
             import traceback
