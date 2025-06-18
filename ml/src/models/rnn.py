@@ -196,8 +196,7 @@ class HandwritingRNN(nn.Module):
     @torch.jit.export  
     def sample(self, char_seq: torch.Tensor, char_seq_lengths: torch.Tensor,
                max_length: int = 1000, bias: float = 0.5,
-               prime: Optional[PrimingData] = None) -> tuple[torch.Tensor, torch.Tensor]:  
-        print(f"Shape of char_seq: {char_seq.size()}")
+               prime: Optional[PrimingData] = None) -> list[torch.Tensor]:  
         batch_size = char_seq.size(0)  
         device = char_seq.device  
         
@@ -334,5 +333,6 @@ class HandwritingRNN(nn.Module):
         # for any samples that never finished, their length is the max generated len 
         max_generated_len = all_strokes.size(1) 
         output_lengths[output_lengths == -1] = max_generated_len 
-        
-        return all_strokes, output_lengths  
+
+        output_list = [all_strokes[i,:output_lengths[i]] for i in range(batch_size)]
+        return output_list 
