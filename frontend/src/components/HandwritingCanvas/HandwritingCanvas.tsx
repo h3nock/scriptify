@@ -26,26 +26,17 @@ const HandwritingCanvas: React.FC<HandwritingCanvasProps> = ({
   canvasHeight = 200,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  // animation state
   const [currentStrokeIndex, setCurrentStrokeIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
 
-  // calculate total points count
-  const totalPoints = useMemo(() => {
-    return strokes.length;
-  }, [strokes]);
-
-  // calculate current points drawn based on animation progress
-  const currentPointsDrawn = useMemo(() => {
-    return currentStrokeIndex;
-  }, [currentStrokeIndex]);
-
-  // Utility function to smooth stroke points 
+  // Utility function to smooth stroke points
   const smoothStrokePoints = useCallback((points: number[][]): number[][] => {
     if (points.length < 3) return points;
 
     // simple moving average smoothing (window size 3)
     const smoothed: number[][] = [];
-    smoothed.push(points[0]); 
+    smoothed.push(points[0]);
 
     for (let i = 1; i < points.length - 1; i++) {
       const prev = points[i - 1];
@@ -217,7 +208,7 @@ const HandwritingCanvas: React.FC<HandwritingCanvasProps> = ({
       // dynamic padding based on text length and canvas size
       const textLength = strokes.length;
       const basePadding = Math.min(canvasWidth, canvasHeight) * 0.1;
-      const lengthFactor = Math.min(textLength / 100, 1); 
+      const lengthFactor = Math.min(textLength / 100, 1);
       const padding = basePadding + lengthFactor * basePadding * 0.5;
 
       const availableWidth = canvasWidth - 2 * padding;
@@ -331,7 +322,7 @@ const HandwritingCanvas: React.FC<HandwritingCanvasProps> = ({
     // scale the context to ensure correct drawing operations
     tempCtx.scale(scale, scale);
 
-    // set white background 
+    // set white background
     tempCtx.fillStyle = "#ffffff";
     tempCtx.fillRect(0, 0, canvasWidth, canvasHeight);
 
@@ -402,9 +393,8 @@ const HandwritingCanvas: React.FC<HandwritingCanvasProps> = ({
           continue;
         }
 
-        
         currentPathPoints.push([x, y]);
-        if (penState === 1){
+        if (penState === 1) {
           // pen up -> draw current path if it has multiple points, then reset
           if (currentPathPoints.length > 1) {
             drawSmoothPath(currentPathPoints);
@@ -412,7 +402,6 @@ const HandwritingCanvas: React.FC<HandwritingCanvasProps> = ({
           currentPathPoints = [];
         }
       }
-
     }
 
     // download the image
@@ -431,7 +420,7 @@ const HandwritingCanvas: React.FC<HandwritingCanvasProps> = ({
       },
       "image/png",
       1.0
-    ); 
+    );
   }, [normalizedStrokes, canvasWidth, canvasHeight, strokeColor, strokeWidth]);
 
   // event listeners for replay and download
@@ -448,7 +437,7 @@ const HandwritingCanvas: React.FC<HandwritingCanvasProps> = ({
     };
   }, [reAnimate, downloadCanvas]);
 
-  // canvas setup 
+  // canvas setup
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -525,13 +514,6 @@ const HandwritingCanvas: React.FC<HandwritingCanvasProps> = ({
           height={canvasHeight}
           className="handwriting-canvas"
         />
-      </div>
-
-      <div className="canvas-info">
-        <span>
-          Points: {currentPointsDrawn} / {totalPoints}
-        </span>
-        {isPlaying && <span className="animating-indicator">●</span>}
       </div>
     </div>
   );
