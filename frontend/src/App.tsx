@@ -127,8 +127,8 @@ function App() {
                 step={0.05}
                 onChange={setTempBias}
                 getLabel={getStyleLabel}
-                leftLabel="Conservative"
-                rightLabel="Creative"
+                leftLabel="Natural"
+                rightLabel="Clean"
                 disabled={isLoading}
               />
 
