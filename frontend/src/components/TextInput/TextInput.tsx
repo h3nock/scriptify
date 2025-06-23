@@ -56,7 +56,8 @@ const TextInput = ({
         </div>
       </div>
       <div className="helper-text">
-        Note: Input is limited to {maxLength} characters to ensure optimal performance on free-tier hosting.
+        Limited to {maxLength} characters for demo hosting. This 5M-params LSTM model is running on a single vCPU, taking 10-60s to
+        generate (vs 20ms on Tesla V100). This delay reflects hosting constraints, not model performance.
       </div>
     </div>
   );
