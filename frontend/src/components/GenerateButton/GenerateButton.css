@@ -2,24 +2,28 @@
   background: #007acc;
   color: white;
   border: none;
-  padding: 0.75rem 1.5rem;
-  border-radius: 6px;
-  font-size: 0.95rem;
-  font-weight: 500;
+  padding: 0.875rem 1.75rem;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 600;
   cursor: pointer;
-  transition: background 0.2s ease;
+  transition: all 0.2s ease;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
-  min-width: 100px;
+  min-width: 120px;
   white-space: nowrap;
-  height: 3rem; 
+  height: 3.4rem; 
   box-sizing: border-box;
+  box-shadow: 0 2px 4px rgba(0, 122, 204, 0.2);
+  line-height: 1.4;
 }
 
 .generate-button:hover:not(:disabled) {
   background: #0056b3;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(0, 122, 204, 0.3);
 }
 
 .generate-button:disabled {

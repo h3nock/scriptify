@@ -486,14 +486,21 @@ const HandwritingCanvas: React.FC<HandwritingCanvasProps> = ({
   }
   return (
     <div className="handwriting-canvas-container">
-      <div className="canvas-controls">
-        <div className="control-buttons">
+      <canvas
+        ref={canvasRef}
+        width={canvasWidth}
+        height={canvasHeight}
+        className="handwriting-canvas"
+      />
+
+      {normalizedStrokes.length > 0 && (
+        <div className="canvas-controls">
           <button
             onClick={reAnimate}
             disabled={!normalizedStrokes.length || isPlaying}
             className="control-btn animate-btn"
           >
-            {isPlaying ? "Animating..." : "Replay Animation"}
+            {isPlaying ? "Animating..." : "Replay"}
           </button>
 
           <button
@@ -505,16 +512,7 @@ const HandwritingCanvas: React.FC<HandwritingCanvasProps> = ({
             Download
           </button>
         </div>
-      </div>
-
-      <div className="canvas-wrapper">
-        <canvas
-          ref={canvasRef}
-          width={canvasWidth}
-          height={canvasHeight}
-          className="handwriting-canvas"
-        />
-      </div>
+      )}
     </div>
   );
 };
