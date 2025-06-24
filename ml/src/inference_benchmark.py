@@ -251,7 +251,7 @@ def main():
 
     # a warmp up turn 
     generated_strokes = sample(char_seq_tensor, char_lengths=char_lengths_tensor, max_gen_len=1200,bias=args.bias, style=args.style)
-    generated_strokes_np = np.array([stroke.squeeze(0).cpu().numpy() for stroke in generated_strokes])
+    generated_strokes_np = generated_strokes[0].cpu().numpy()
     plot_offset_strokes(generated_strokes_np,"./packaged_models/", plot_only_text=True)
     run_name = model_path.name  
     benchmark(args.text, run_name, args.num_runs,chars=char_seq_tensor, chars_len=char_lengths_tensor, 
