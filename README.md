@@ -177,6 +177,6 @@ cd ml && python src/train.py --run_name dev_experiment
 
 ## Deployment
 
-**Frontend**: Deployed to [Vercel](https://scriptify.vercel.app) on push to main branch
+**Frontend**: Deployed to [Vercel](https://scriptify-web.vercel.app) on push to main branch
 
 **Backend**: Deployed on [HuggingFace Spaces](https://huggingface.co/spaces/bitwise42/scriptify-api/tree/main) with GPU acceleration
