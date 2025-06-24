@@ -33,11 +33,19 @@
   font-size: 0.75rem;
   color: #6c757d;
   margin-top: 0.5rem; 
-  padding: 0 10px;
+  padding: 0;
 }
 
 .slider-labels span {
   font-weight: 400;
+}
+
+.slider-labels span:first-child {
+  text-align: left;
+}
+
+.slider-labels span:last-child {
+  text-align: right;
 }
 
 .slider-ticks {
@@ -142,8 +150,16 @@
   }
   
   .slider-labels {
-    padding: 0 8px;
+    padding: 0;
     margin-top: 0.4rem; 
+  }
+  
+  .slider-labels span:first-child {
+    text-align: left;
+  }
+
+  .slider-labels span:last-child {
+    text-align: right;
   }
   
   .slider-ticks {
