@@ -122,9 +122,9 @@ function App() {
               <Slider
                 label="Style"
                 value={tempBias}
-                min={0.2}
+                min={0.5}
                 max={6}
-                step={0.05}
+                step={0.1}
                 onChange={setTempBias}
                 getLabel={getStyleLabel}
                 leftLabel="Natural"
