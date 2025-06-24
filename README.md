@@ -6,12 +6,14 @@ An end-to-end machine learning system for handwriting synthesis using LSTM neura
 
 This repository contains the complete pipeline from model training to deployment, including data preprocessing, neural network implementation, API service, and web interface for handwriting generation.
 
+This implementation is based on Alex Graves' paper ["Generating Sequences With Recurrent Neural Networks"](https://arxiv.org/abs/1308.0850).
+
 ## Repository Structure
 
 This project is organized into four main components:
 
 - **`ml/`** - Complete ML training pipeline with PyTorch implementation
-- **`api/`** - Standalone FastAPI backend service for model inference and flexiable deployment
+- **`api/`** - Standalone FastAPI backend service for model inference and flexible deployment
 - **`frontend/`** - React TypeScript web application
 - **`scriptify-hf-space/`** - HuggingFace Space specific deployment
 
@@ -115,15 +117,16 @@ scriptify/
         └── style1.txt
 ```
 
-## Getting Started 
+## Getting Started
 
-### Prerequisites 
+### Prerequisites
+
 - Python 3.9+ (for API and ML)
-- Node.js 18+ (for frontend) 
+- Node.js 18+ (for frontend)
 - CUDA-compatible GPU (recommended for ML training)
 - Conda (for ML env't management)
 - Weights & Biases account (for experiment tracking)
-- IAM On-Line Handwriting Database  
+- IAM On-Line Handwriting Database
 
 ### Model Training
 
@@ -134,8 +137,8 @@ cd ml
 conda env create -f environment.yml
 conda activate scriptify_ml_env
 
-# Login to Weights & Biases (only for the first time) 
-wandb login 
+# Login to Weights & Biases (only for the first time)
+wandb login
 
 # Configure training parameters by editing config/config.yaml
 
@@ -147,7 +150,7 @@ bash scripts/run_ddp.sh 0 # 1st node
 bash scripts/run_ddp.sh 1 # 2nd node
 ```
 
-### API Server  
+### API Server
 
 ```bash
 cd api
@@ -160,7 +163,7 @@ python src/main.py
 # API available at http://localhost:8000
 ```
 
-### Frontend Application 
+### Frontend Application
 
 ```bash
 cd frontend
@@ -175,5 +178,5 @@ npm run dev
 
 ## Deployment
 
-**Frontend**: Deployed to [Vercel](https://scriptify-web.vercel.app) 
+**Frontend**: Deployed to [Vercel](https://scriptify-web.vercel.app)
 **Backend**: Deployed on [HuggingFace Spaces](https://huggingface.co/spaces/bitwise42/scriptify-api/tree/main)
