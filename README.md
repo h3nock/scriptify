@@ -115,9 +115,17 @@ scriptify/
         └── style1.txt
 ```
 
-## Development
+## Getting Started 
 
-### Model Training (ML Pipeline)
+### Prerequisites 
+- Python 3.9+ (for API and ML)
+- Node.js 18+ (for frontend) 
+- CUDA-compatible GPU (recommended for ML training)
+- Conda (for ML env't management)
+- Weights & Biases account (for experiment tracking)
+- IAM On-Line Handwriting Database  
+
+### Model Training
 
 ```bash
 cd ml
@@ -125,6 +133,9 @@ cd ml
 # Setup conda environment
 conda env create -f environment.yml
 conda activate scriptify_ml_env
+
+# Login to Weights & Biases (only for the first time) 
+wandb login 
 
 # Configure training parameters by editing config/config.yaml
 
@@ -136,7 +147,7 @@ bash scripts/run_ddp.sh 0 # 1st node
 bash scripts/run_ddp.sh 1 # 2nd node
 ```
 
-### API Development
+### API Server  
 
 ```bash
 cd api
@@ -149,7 +160,7 @@ python src/main.py
 # API available at http://localhost:8000
 ```
 
-### Frontend Development
+### Frontend Application 
 
 ```bash
 cd frontend
@@ -159,24 +170,10 @@ npm install
 
 # Start development server
 npm run dev
-# Application available at http://localhost:3000
-```
-
-### Full Stack Development
-
-```bash
-# Terminal 1: Start API
-cd api && python src/main.py
-
-# Terminal 2: Start Frontend
-cd frontend && npm run dev
-
-# Terminal 3: Monitor training (optional)
-cd ml && python src/train.py --run_name dev_experiment
+# Application available at http://localhost:5173
 ```
 
 ## Deployment
 
-**Frontend**: Deployed to [Vercel](https://scriptify-web.vercel.app) on push to main branch
-
-**Backend**: Deployed on [HuggingFace Spaces](https://huggingface.co/spaces/bitwise42/scriptify-api/tree/main) with GPU acceleration
+**Frontend**: Deployed to [Vercel](https://scriptify-web.vercel.app) 
+**Backend**: Deployed on [HuggingFace Spaces](https://huggingface.co/spaces/bitwise42/scriptify-api/tree/main)
