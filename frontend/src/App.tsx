@@ -41,9 +41,9 @@ function App() {
 
   // Style label function 
   const getStyleLabel = (value: number) => {
-    if (value <= 1) return "Conservative";
-    if (value <= 2.5) return "Balanced";
-    return "Creative";
+    if (value <= 1) return "Natural";
+    if (value < 2) return "Balanced";
+    return "Clean";
   };
 
   // Speed label function 
