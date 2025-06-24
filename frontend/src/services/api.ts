@@ -10,7 +10,7 @@ export interface HandwritingResponse {
 }
 
 const API_BASE_URL =
-  import.meta.env.API_BASE_URL || "https://bitwise42-scriptify-api.hf.space";
+  import.meta.env.VITE_API_BASE_URL || "https://bitwise42-scriptify-api.hf.space";
 const DEFAULT_TIMEOUT = 180000;
 
 class ApiError extends Error {
