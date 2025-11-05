@@ -125,4 +125,4 @@ Edit `ml/config/config.yaml` (or set `SCRIPTIFY_CONFIG_PATH`). Key fields:
 ## Deployment
 
 - Frontend: Vercel — https://scriptify-web.vercel.app
-- Backend: HuggingFace Spaces — https://huggingface.co/spaces/bitwise42/scriptify-api
+- Backend: HuggingFace Spaces — https://huggingface.co/spaces/h3nock/scriptify-api
