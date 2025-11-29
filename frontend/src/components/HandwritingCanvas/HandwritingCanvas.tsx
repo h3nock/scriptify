@@ -237,7 +237,9 @@ const HandwritingCanvas: React.FC<HandwritingCanvasProps> = ({
       scaleFactor = Math.max(minScale, Math.min(maxScale, scaleFactor));
 
       const availableWidth = canvasWidth - 2 * basePadding;
-      const availableHeight = canvasHeight - 2 * basePadding;
+      // Reserve extra space at the bottom for the controls (approx 60px)
+      const bottomPadding = basePadding + 60;
+      const availableHeight = canvasHeight - basePadding - bottomPadding;
 
       const scaleX = availableWidth / actualWidth;
       const scaleY = availableHeight / actualHeight;
@@ -252,13 +254,11 @@ const HandwritingCanvas: React.FC<HandwritingCanvasProps> = ({
       const offsetX = (canvasWidth - scaledWidth) / 2 - minX * scale;
 
       // improved vertical centering
-      // For single lines (short height), center perfectly
-      // For multiple lines (tall height), bias slightly upwards
-      const heightRatio = actualHeight / actualWidth;
-      const verticalBias = heightRatio > 0.5 ? 0.45 : 0.5; // 0.5 is center, < 0.5 is higher
-      
-      const verticalOffset = canvasHeight * verticalBias;
-      const offsetY = verticalOffset - (minY * scale + scaledHeight / 2);
+      // We center within the available height (top to bottom-padding)
+      // effectively pushing content up
+      // Shift up by an additional 40px to ensure it clears the bottom controls comfortably
+      const verticalCenter = basePadding + availableHeight / 2 + 40;
+      const offsetY = verticalCenter - (minY * scale + scaledHeight / 2);
 
       const normalized = strokes.map((stroke, index) => {
         if (!Array.isArray(stroke) || stroke.length < 2) {

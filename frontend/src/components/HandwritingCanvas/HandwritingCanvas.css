@@ -114,13 +114,6 @@
   .canvas-controls {
     gap: 0.75rem;
     flex-wrap: wrap;
-    justify-content: center;
-    position: relative;
-    bottom: auto;
-    right: auto;
-    opacity: 1;
-    transform: none;
-    animation: none;
     margin-top: 1rem;
   }
 

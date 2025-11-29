@@ -180,8 +180,8 @@ function App() {
             animationSpeed={animationSpeed}
             strokeColor="#1a1a1a"
             strokeWidth={strokeWidth}
-            canvasWidth={800}
-            canvasHeight={300}
+            canvasWidth={850}
+            canvasHeight={400}
             showControls={strokes.length > 0}
           />
         </div>
