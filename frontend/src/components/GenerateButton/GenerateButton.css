@@ -1,47 +1,53 @@
 .generate-button {
-  background: #007acc;
+  background-color: var(--primary-color, #111827);
   color: white;
   border: none;
-  padding: 0.875rem 1.75rem;
-  border-radius: 8px;
+  padding: 0 1.5rem;
+  height: 48px;
+  border-radius: var(--radius-lg, 1rem);
+  /* Pill shape */
   font-size: 1rem;
-  font-weight: 600;
+  font-weight: 500;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 0.5rem;
   min-width: 120px;
-  white-space: nowrap;
-  height: 3.4rem; 
-  box-sizing: border-box;
-  box-shadow: 0 2px 4px rgba(0, 122, 204, 0.2);
-  line-height: 1.4;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  letter-spacing: 0.01em;
 }
 
 .generate-button:hover:not(:disabled) {
-  background: #0056b3;
+  background-color: black;
   transform: translateY(-1px);
-  box-shadow: 0 4px 8px rgba(0, 122, 204, 0.3);
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+}
+
+.generate-button:active:not(:disabled) {
+  transform: scale(0.98);
 }
 
 .generate-button:disabled {
-  background: #dee2e6;
-  color: #6c757d;
+  background-color: var(--secondary-color, #9ca3af);
   cursor: not-allowed;
+  opacity: 0.7;
+  transform: none;
+  box-shadow: none;
 }
 
 .loading-spinner {
-  width: 14px;
-  height: 14px;
-  border: 2px solid transparent;
-  border-top: 2px solid currentColor;
+  width: 18px;
+  height: 18px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
   border-radius: 50%;
-  animation: spin 1s linear infinite;
+  border-top-color: white;
+  animation: spin 0.8s linear infinite;
+  margin-right: 8px;
 }
 
 @keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }

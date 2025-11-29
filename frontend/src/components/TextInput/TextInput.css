@@ -1,85 +1,71 @@
 .text-input-container {
-  flex: 1;
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
+  width: 100%;
+  position: relative;
 }
 
 .input-wrapper {
   position: relative;
   display: flex;
   align-items: center;
+  background: #f9fafb;
+  border-radius: var(--radius-lg, 1rem);
+  border: 1px solid #f3f4f6;
+  transition: all 0.2s ease;
+  box-shadow: var(--shadow-sm, 0 1px 2px 0 rgba(0, 0, 0, 0.05));
+}
+
+.input-wrapper:hover {
+  border-color: #e5e7eb;
+  background: #ffffff;
+}
+
+.input-wrapper:focus-within {
+  border-color: var(--primary-color, #111827);
+  background: #ffffff;
+  box-shadow: 0 0 0 2px rgba(17, 24, 39, 0.1);
 }
 
 .text-input {
   width: 100%;
-  padding: 0.875rem 4rem 0.875rem 1rem; 
-  border: 2px solid #e9ecef;
-  border-radius: 8px;
+  padding: 0.875rem 1.5rem;
   font-size: 1rem;
-  font-family: inherit;
-  background: white;
-  color: #2c3e50;
-  transition: all 0.2s ease;
+  border: none;
+  border-radius: var(--radius-lg, 1rem);
   outline: none;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
-  line-height: 1.4;
+  background: transparent;
+  color: var(--text-primary, #111827);
+  font-family: inherit;
+}
+
+.text-input::placeholder {
+  color: var(--text-secondary, #9ca3af);
+  opacity: 0.7;
+}
+
+.text-input.error {
+  border-color: #ef4444;
+}
+
+.text-input:disabled {
+  background-color: #f9fafb;
+  cursor: not-allowed;
+  color: #9ca3af;
 }
 
 .character-count {
-  position: absolute;
-  right: 1rem;
-  top: 50%;
-  transform: translateY(-50%);
   font-size: 0.75rem;
-  color: #6c757d;
+  color: var(--text-secondary, #9ca3af);
+  padding-right: 1.25rem;
+  white-space: nowrap;
   font-weight: 500;
   pointer-events: none;
-  background: white;
-  padding: 0 0.25rem;
 }
 
 .helper-text {
   font-size: 0.75rem;
   color: #6c757d;
   margin-top: 0.25rem;
-}
-
-.text-input:focus {
-  border-color: #007acc;
-  box-shadow: 0 0 0 3px rgba(0, 122, 204, 0.1);
-}
-
-.text-input.error {
-  border-color: #e74c3c;
-}
-
-.text-input.error + .character-count {
-  color: #e74c3c;
-}
-
-.text-input.disabled {
-  background-color: #f8f9fa;
-  cursor: not-allowed;
-  opacity: 0.7;
-}
-
-.text-input::placeholder {
-  color: #6c757d;
-}
-
-/* make it responsive */
-@media (max-width: 480px) {
-  .text-input {
-    padding: 0.75rem 3.5rem 0.75rem 1rem;
-  }
-  
-  .character-count {
-    right: 0.75rem;
-    font-size: 0.7rem;
-  }
-  
-  .helper-text {
-    font-size: 0.7rem;
-  }
 }
