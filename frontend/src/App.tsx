@@ -178,10 +178,10 @@ function App() {
           <HandwritingCanvas
             strokes={strokes}
             animationSpeed={animationSpeed}
-            strokeColor="#2c3e50"
+            strokeColor="#1a1a1a"
             strokeWidth={strokeWidth}
-            canvasWidth={800}
-            canvasHeight={300}
+            canvasWidth={850}
+            canvasHeight={400}
             showControls={strokes.length > 0}
           />
         </div>

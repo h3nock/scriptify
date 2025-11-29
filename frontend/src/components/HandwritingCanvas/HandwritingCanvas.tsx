@@ -30,24 +30,36 @@ const HandwritingCanvas: React.FC<HandwritingCanvasProps> = ({
   const [currentStrokeIndex, setCurrentStrokeIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
 
-  // Utility function to smooth stroke points
+  // Chaikin's smoothing algorithm
   const smoothStrokePoints = useCallback((points: number[][]): number[][] => {
     if (points.length < 3) return points;
 
-    // simple moving average smoothing (window size 3)
-    const smoothed: number[][] = [];
-    smoothed.push(points[0]);
+    let smoothed = [...points];
+    // Apply 2 iterations of Chaikin's algorithm for smoothness
+    for (let iter = 0; iter < 2; iter++) {
+      const newPoints: number[][] = [];
+      newPoints.push(smoothed[0]); // Keep start point
 
-    for (let i = 1; i < points.length - 1; i++) {
-      const prev = points[i - 1];
-      const curr = points[i];
-      const next = points[i + 1];
-      const smoothX = (prev[0] + curr[0] + next[0]) / 3;
-      const smoothY = (prev[1] + curr[1] + next[1]) / 3;
-      smoothed.push([smoothX, smoothY]);
+      for (let i = 0; i < smoothed.length - 1; i++) {
+        const p0 = smoothed[i];
+        const p1 = smoothed[i + 1];
+
+        // Q = 0.75*P0 + 0.25*P1
+        // R = 0.25*P0 + 0.75*P1
+        const qx = 0.75 * p0[0] + 0.25 * p1[0];
+        const qy = 0.75 * p0[1] + 0.25 * p1[1];
+
+        const rx = 0.25 * p0[0] + 0.75 * p1[0];
+        const ry = 0.25 * p0[1] + 0.75 * p1[1];
+
+        newPoints.push([qx, qy]);
+        newPoints.push([rx, ry]);
+      }
+
+      newPoints.push(smoothed[smoothed.length - 1]); // Keep end point
+      smoothed = newPoints;
     }
 
-    smoothed.push(points[points.length - 1]);
     return smoothed;
   }, []);
 
@@ -63,6 +75,8 @@ const HandwritingCanvas: React.FC<HandwritingCanvasProps> = ({
       if (strokesToDraw.length === 0) return;
 
       ctx.strokeStyle = strokeColor;
+      // Dynamic stroke width based on canvas size to ensure visibility
+      // but respecting the user's choice
       ctx.lineWidth = strokeWidth;
       ctx.lineCap = "round";
       ctx.lineJoin = "round";
@@ -85,10 +99,10 @@ const HandwritingCanvas: React.FC<HandwritingCanvasProps> = ({
 
         // add subtle shadow effect for depth
         ctx.save();
-        ctx.shadowColor = "rgba(0, 0, 0, 0.1)";
-        ctx.shadowBlur = 1;
-        ctx.shadowOffsetX = 0.5;
-        ctx.shadowOffsetY = 0.5;
+        ctx.shadowColor = "rgba(0, 0, 0, 0.15)"; // Slightly darker shadow
+        ctx.shadowBlur = 2; // Increased blur
+        ctx.shadowOffsetX = 1;
+        ctx.shadowOffsetY = 1;
 
         ctx.beginPath();
         ctx.moveTo(smoothedPoints[0][0], smoothedPoints[0][1]);
@@ -207,29 +221,31 @@ const HandwritingCanvas: React.FC<HandwritingCanvasProps> = ({
 
       // dynamic padding based on text length and canvas size
       const textLength = strokes.length;
-      const basePadding = Math.min(canvasWidth, canvasHeight) * 0.1;
-      const lengthFactor = Math.min(textLength / 100, 1);
-      const padding = basePadding + lengthFactor * basePadding * 0.5;
+      const basePadding = Math.min(canvasWidth, canvasHeight) * 0.05; // Reduced base padding
 
-      const availableWidth = canvasWidth - 2 * padding;
-      const availableHeight = canvasHeight - 2 * padding;
+      // Continuous scaling factor based on text length
+      // For short text, we want it larger (closer to 0.95)
+      // For long text, we want it smaller but not too small (down to 0.75)
+      // Using a decay function: scale = minScale + (maxScale - minScale) * e^(-k * length)
+      const maxScale = 0.95;
+      const minScale = 0.75;
+      const decayRate = 0.002; // Adjust this to control how fast it shrinks
+      
+      let scaleFactor = minScale + (maxScale - minScale) * Math.exp(-decayRate * textLength);
+      
+      // Clamp scale factor just in case
+      scaleFactor = Math.max(minScale, Math.min(maxScale, scaleFactor));
+
+      const availableWidth = canvasWidth - 2 * basePadding;
+      // Reserve extra space at the bottom for the controls (approx 60px)
+      const bottomPadding = basePadding + 60;
+      const availableHeight = canvasHeight - basePadding - bottomPadding;
 
       const scaleX = availableWidth / actualWidth;
       const scaleY = availableHeight / actualHeight;
+      
+      // Use the smaller scale to fit both dimensions, then apply our continuous factor
       const baseScale = Math.min(scaleX, scaleY);
-
-      let scaleFactor = 0.85;
-
-      // for shorter texts, use more space to make them larger and more readable
-      if (textLength < 50) {
-        scaleFactor = 0.95;
-      } else if (textLength < 150) {
-        scaleFactor = 0.9;
-      } else if (textLength > 500) {
-        // for very long texts, use slightly less space to ensure everything fits
-        scaleFactor = 0.8;
-      }
-
       const scale = baseScale * scaleFactor;
 
       // enhanced centering with vertical alignment adjustments
@@ -237,9 +253,12 @@ const HandwritingCanvas: React.FC<HandwritingCanvasProps> = ({
       const scaledHeight = actualHeight * scale;
       const offsetX = (canvasWidth - scaledWidth) / 2 - minX * scale;
 
-      // improved vertical centering slightly above center for better visual balance
-      const verticalOffset = canvasHeight * 0.45; // 45% from top
-      const offsetY = verticalOffset - (minY * scale + scaledHeight / 2);
+      // improved vertical centering
+      // We center within the available height (top to bottom-padding)
+      // effectively pushing content up
+      // Shift up by an additional 40px to ensure it clears the bottom controls comfortably
+      const verticalCenter = basePadding + availableHeight / 2 + 40;
+      const offsetY = verticalCenter - (minY * scale + scaledHeight / 2);
 
       const normalized = strokes.map((stroke, index) => {
         if (!Array.isArray(stroke) || stroke.length < 2) {
