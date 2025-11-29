@@ -74,6 +74,7 @@
   justify-content: center;
   width: 40px;
   height: 40px;
+  margin-right: -1rem;
 }
 
 .settings-toggle:hover {
