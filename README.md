@@ -122,7 +122,7 @@ Edit `ml/config/config.yaml` (or set `SCRIPTIFY_CONFIG_PATH`). Key fields:
 - `dataset.max_stroke_len`, `dataset.max_text_len`, `dataset.alphabet_string`
 - `wandb.enabled`, `wandb.project_name`
 
-## Deployment
+## Demo
 
-- Frontend: Vercel — https://scriptify-web.vercel.app
+- Frontend: https://scriptify.h3nok.dev/
 - Backend: HuggingFace Spaces — https://huggingface.co/spaces/h3nock/scriptify-api
